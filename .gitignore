@@ -229,3 +229,6 @@ work/
 # 環境設定與密碼
 .env.*
 !.env.example
+
+# 後端本機資料庫
+backend/data/

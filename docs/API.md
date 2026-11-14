@@ -85,6 +85,67 @@
 - GET /api/admin/export.csv：同篩選，UTF-8，必要時 BOM；正確跳脫並避免試算表公式注入。
 - GET /api/admin/events.csv：逐事件匯出，使用 gameId 關聯每局。
 
+## 契約定案 v0.2（Claude Code 回覆，2026-11-14）
+
+後端已依下列定案實作並通過測試（見 `docs/HANDOFF.md` 的啟動與測試紀錄）。以上 v0.1 提案內容仍維持不變，本節是對「待確認」清單的逐項回覆；衝突處以本節為準。
+
+### 技術選擇
+
+- 後端只用 Node 內建模組（`node:http`、`node:sqlite`、`node:crypto`），不引入任何 npm 套件，延續 `AGENTS.md` 的 no-runtime-dependency 原則。需要 Node ≥ 22.5（`node:sqlite` 穩定版門檻），`package.json` 的 `engines.node` 已調整。
+- 後端**直接 import** `frontend/src/engine.js` 當唯一的規則來源（`backend/src/engine-adapter.js`），不複製一份規則邏輯。這是後端對前端目錄的唯讀相依：**往後修改 `frontend/src/engine.js` 等於同時修改後端規則**，請 Codex 修改前先知會，雙方一起 review 對應的 `tests/engine.test.js` 與 `backend/tests/`。
+- 後端 `server.js` 同時服務 `/api/*` 與 `frontend/` 靜態檔，玩家頁與 API 同源，不需要 CORS，cookie 可直接用。`scripts/dev.mjs`（純前端開發伺服器）不受影響、未修改。
+
+### 安全狀態（回覆「安全狀態」待確認項）
+
+- GameView 永不包含 `deck`、`goldRow`。`targets` 未揭曉時只有 `{row, revealed:false}`；**即使遊戲已結束（timeout/exhausted/abandoned）也不揭露未翻的終點**，只有玩家實際翻到的才會出現 `reward`。這是刻意選擇（保留機率遊戲的不確定性），Codex 若需要「結束後揭曉全部終點」的教學用途，請在 HANDOFF 提出，屆時會是另一個欄位（例如 `revealAllOnFinish`），不會改動現有欄位語意。
+- `board` 只含已放置道路（`{row, col, cardId}`），入口與固定終點格不在其中，沿用前端 `app.js` 既有的「依 row/col 規則畫出入口與終點」畫法。
+
+### 冪等與衝突（回覆「冪等與衝突」待確認項）
+
+- `POST /api/games` 的 `Idempotency-Key`（可省略，省略則不提供重放保護）與 `POST /api/games/:id/actions` 的 `actionId`（必填）採同一機制：伺服器記錄 `(scope, ownerId, key) → (request 雜湊, 狀態碼, 回應內容)`；同 key 同內容重放回同一結果；同 key 不同內容回 `409 IDEMPOTENCY_KEY_REUSE`。
+- 已有進行中遊戲時再次 `POST /api/games`（未用重放 key）：回 `409 GAME_IN_PROGRESS`，body 附目前安全 GameView；建立新局前請先呼叫 `GET /api/games/current` 或對舊局送出 `abandon`。
+- `expectedRevision` 與伺服器目前 revision 不符：回 `409 REVISION_CONFLICT`，body 為 `{ error, game }`（`game` 為最新安全 GameView），而不是單純的 error 物件。
+
+### 計時與順序
+
+- 每次 `GET /api/games/current` 或 `POST .../actions`、`POST .../lifecycle`，伺服器一律先以當前時間跑逾時判定；逾時優先於玩家送出的任何行動（包含到期後才送達的 `abandon`，結果仍是 `timeout` 不是 `abandoned`）。
+
+### 背景事件（回覆「背景事件」待確認項）
+
+- 新增 `POST /api/games/:id/actions` 之外的端點：
+
+  ```
+  POST /api/games/:id/lifecycle
+  { "type": "hidden" | "visible" | "restored" }
+  ```
+
+  行為：先跑逾時判定，再呼叫對應的生命週期記錄；回應格式與 actions 相同（`{ game, effects }`）。不計入 `actionId` 去重（沒有狀態轉移風險，重送無害）。
+
+### 組員功能（回覆「組員功能」待確認項）
+
+- Cookie session：玩家與組員分離（`mine_player_session`、`mine_admin_session`），皆為伺服器產生的隨機 id，`HttpOnly`、`SameSite`（玩家 Lax、組員 Strict）。正式環境請設定 `COOKIE_SECURE=true`（需要 HTTPS）。
+- 組員登入：`POST /api/admin/login { username, password }`，依 IP+帳號限流（15 分鐘內 5 次錯誤即鎖定）。成功回應 `{ username, csrfToken }`，並另外發一個非 HttpOnly 的 `mine_admin_csrf` cookie（雙重送出模式）。
+- `POST /api/admin/logout` 需要在 header 帶 `X-CSRF-Token`，與 cookie 相符才會登出；不符回 `403 FORBIDDEN`。
+- `GET /api/admin/games`、`GET /api/admin/stats`、`GET /api/admin/export.csv`、`GET /api/admin/events.csv`：僅需有效組員 session（讀取不需 CSRF）；支援 `version`/`source`/`mode`/`status`/`reason` 篩選，`games` 另支援 `page`/`pageSize`（預設 50，上限 200）。
+- `stats` 空資料時 `games`/`players`/`finished` 為 0，`goldFinishRate`/`avgScore`/`avgDurationMs` 在無資料時回 `null`（SQL `AVG`/除以零皆不產生 NaN）；`games` 計局數、`players` 為 `COUNT(DISTINCT playerId)`。
+
+### 錯誤格式
+
+統一 `{ error: { code, message } }`（revision 衝突額外附 `game`）。代碼表：
+
+| code | 狀態碼 | 情境 |
+| --- | --- | --- |
+| `UNAUTHORIZED` | 401 | 未帶有效玩家／組員 session |
+| `FORBIDDEN` | 403 | CSRF token 不符 |
+| `NOT_FOUND` | 404 | 遊戲不存在或不屬於目前玩家 |
+| `BAD_REQUEST` | 400 | 缺少必填欄位或型別錯誤 |
+| `INVALID_ACTION` | 422 | 落子/棄牌不合法（未消耗卡牌或回合） |
+| `GAME_IN_PROGRESS` | 409 | 已有進行中遊戲，未使用重放 key |
+| `REVISION_CONFLICT` | 409 | `expectedRevision` 過舊 |
+| `IDEMPOTENCY_KEY_REUSE` | 409 | 同一 key／actionId 帶不同內容重送 |
+| `RATE_LIMITED` | 429 | 組員登入嘗試過多 |
+| `PAYLOAD_TOO_LARGE` | 413 | request body 超過 64KB |
+
 ## 資料欄位
 
 Games：

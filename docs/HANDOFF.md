@@ -27,7 +27,52 @@
 
 ## 協作備註
 
-（Claude Code 可在此補充框架選擇、契約修正、完成內容與待 review 項目。）
+### Claude Code 後端完成（2026-11-14）
+
+依使用者指示：先讀 AGENTS.md／docs，確認 API 契約，再實作後端；保留現有前端；不做問卷、不自行 Push、不部署。契約定案已寫回 `docs/API.md` 的「契約定案 v0.2」小節（逐項回覆本檔先前列的待確認清單），以下只列重點與交回證據。
+
+**框架與資料庫**：Node 內建 `node:http` + `node:sqlite`（零 npm 相依，延續專案慣例），需要 Node ≥ 22.5；`package.json` 的 `engines.node` 已調整，新增 `backend`/`backend:migrate`/`test:backend` script，**原有 `dev`/`build` 未動，`test` 改成 `node --test tests`（明確指定路徑）**——原本 `node --test` 沒給路徑，加入 `backend/tests/` 後會被一併掃到，為避免前端 `npm test` 意外吃到後端測試，才加上路徑；行為與原本（12 個 engine 測試）完全一致，已驗證。
+
+**⚠️ 請注意的跨界相依**：`backend/src/engine-adapter.js` 直接 `import` `frontend/src/engine.js` 當唯一規則引擎，沒有複製第二份規則邏輯（原因：避免 `docs/RULES.md` 提醒的「不同版本不可混用」）。這代表 **往後修改 `frontend/src/engine.js` 會同時改變後端判定**。請在改動該檔前先在這裡留言，我們一起跑 `npm test` 與 `npm run test:backend` 確認雙邊都過。`frontend/` 其餘檔案、`scripts/dev.mjs`、`dist/` 完全沒有被後端碰過。
+
+**目錄**：`backend/src/`（server、db、engine-adapter、gameView、session、idempotency、ratelimit、csv、errors、password、players-repo、games-repo、admin-repo、routes/）、`backend/migrations/0001_init.sql`、`backend/scripts/hash-password.mjs`、`backend/.env.example`、`backend/tests/`。
+
+**啟動方式**：
+
+```sh
+cp backend/.env.example backend/.env   # 填 ADMIN_USERNAME，用下行指令產生密碼雜湊
+node backend/scripts/hash-password.mjs "你的密碼"   # 貼到 .env 的 ADMIN_PASSWORD_HASH
+npm run backend:migrate   # 可選，server 啟動時也會自動套用
+npm run backend           # http://localhost:5174，同時服務 /api/* 與前端靜態頁
+```
+
+`DB_PATH` 預設 `backend/data/game.db`（已加入 `.gitignore`）；本機 http 開發請保持 `.env` 的 `COOKIE_SECURE=false`，正式有 HTTPS 才設 `true`，否則瀏覽器會拒絕 cookie。
+
+**測試結果（本機 Windows、Node v26.13.1，2026-11-14）**：
+
+- `npm test`：12/12 通過（既有前端 engine 測試，未受影響）。
+- `npm run build`：成功，`dist/` 產出不變。
+- `npm run test:backend`：**20/20 通過**，涵蓋：
+  - 真實 HTTP 全局流程（用回傳的 board/hand 當機器人找合法落點，不依賴已知 goldRow，跑到 `gold`/`exhausted` 並驗證分數）。
+  - `Idempotency-Key`／`actionId` 重放不重複執行；同 key 不同內容 409；已有進行中遊戲再建局 409 `GAME_IN_PROGRESS`。
+  - `expectedRevision` 衝突回 409 並附最新安全狀態；非法落子 422 且不消耗卡牌/回合。
+  - 換玩家後讀不到、也動不了前一位玩家的遊戲；未登入讀 `current` 401。
+  - 逾時優先於讀取/行動/生命週期事件判定；逾時只結算一次；`abandon` 不能覆蓋已經逾時的結果；背景「restored」事件若已過期會回報 `timeout` effect。
+  - 組員：未登入讀 games/stats/csv 全部 401；密碼錯誤限流（5 次後 429，鎖定期間密碼正確也擋下）；CSRF 不符擋下登出；登出後 session 失效。
+  - 空統計資料不產生 NaN（`goldFinishRate`/`avgScore`/`avgDurationMs` 回 `null`）；局數與不重複玩家數分開計算。
+  - CSV：BOM、逐欄位 quote/escape、公式注入前綴防護。
+  - 關閉再重開資料庫檔案（模擬重啟）後，遊戲資料仍可讀回。
+
+**手動驗證（curl，對應 `docs/API.md` 範例）**：已實際跑過玩家建立 → 建局（含 Idempotency-Key 重放）→ 已有進行中遊戲再建局 409 → 落子 → actionId 重放 → revision 衝突 → 非法落子 422 → lifecycle → 換玩家隔離 → 組員登入/限流/stats/games/export.csv/events.csv/CSRF 登出，皆與 `docs/API.md` 定案一致。範例請求/回應已在本次對話記錄，若需要書面範例可再整理成獨立檔案。
+
+**尚未做（刻意，依指示）**：未建問卷、未 Push、未部署、`.env` 只有範例檔無真實密碼。多實例部署時的限流（目前是單機記憶體限流）與跨機器集中式 session 尚未處理，教室單機／單程序部署沒有這個問題，之後要水平擴充再提出。
+
+### 待 Codex Review 清單
+
+1. `docs/API.md` 的「契約定案 v0.2」：尤其是「結束後不揭曉未翻終點」「GAME_IN_PROGRESS 不先自動結束舊局」「lifecycle 另開端點」這三個設計選擇是否符合預期。
+2. `backend/src/engine-adapter.js` 的跨界相依方式（import 而非複製）是否接受；接受的話請改動 `frontend/src/engine.js` 前先同步。
+3. 把現有 `frontend/src/app.js`、`storage.js` 接到這組 API：cookie 已設 `credentials` 需要時 fetch 要帶 `credentials: 'include'`（同源其實預設就會帶，但保留提醒）；斷線/等待/409 重試提示依 `docs/HANDOFF.md`（Codex 後續段落）處理。
+4. 瀏覽器實測（本次僅有自動化測試與 curl，未用瀏覽器跑過玩家到組員全流程）。
 
 ### Codex 本機複查（2026-11-14）
 
