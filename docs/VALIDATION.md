@@ -1,5 +1,19 @@
 # 前端驗證
 
+## 手機區網 HTTP 相容（2026-11-14，最新）
+
+- frontend/src/uuid.js 在沒有 randomUUID 時改用 getRandomValues 產生 UUID v4；共用 engine 的唯一修改為 UUID helper，不變更遊戲規則與 0.2.0 版本。
+- npm.cmd test 21/21、npm.cmd run test:backend 29/29、建置通過。新測試模擬非安全 context 缺少 randomUUID 的環境，覆蓋試玩開局／出牌及 API key 建構；不是實體手機瀏覽器測試。
+- 已讀取本機 Wi-Fi IPv4 提供使用者連線網址，未更改防火牆／網路／.env。伺服器啟動、同 Wi-Fi 可達性與行動裝置版面仍須使用者實機驗收。
+
+## 同回合落石撤銷翻牌（2026-11-14，最新）
+
+- 前端 20/20、後端 24/24 與建置通過。共用引擎為 Claude Code 修改，本次僅 review，不再更改規則。
+- effects-analysis：多個本回合新終點、連續落石、耗盡結算順序，以及舊回合金幣保留；撤銷 effect 不破壞落石動畫順序。
+- frontend-api：真實 HTTP 與記憶體 DB 局面，驗證 unreveal effect 帶 row、coins 歸零、終點蓋牌與 actionId 重放不新增事件。
+- frontend-ui：模擬 DOM 驗證新 effect 後的撤銷提示、0 金幣與未知終點。不是實際瀏覽器試玩。
+- review 另發現 events／CSV 不讀 event.row，以及新舊規則版本未隔離，已交接於 HANDOFF.md，沒有修改後端或既有資料。
+
 ## 遊戲操作版面壓縮（2026-11-14，最新）
 
 - 桌面（CSS viewport ≥900×600）改為依視窗高度分配：棋盤左上、手牌左下、狀態與操作右側跨兩列；棋盤格依容器高寬縮放，縮減標頭與裝飾留白。短視窗再壓縮說明與統計區，遊戲中的紀錄模式保留標籤、隱藏不能切換的重複說明。

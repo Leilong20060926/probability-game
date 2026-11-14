@@ -1,7 +1,7 @@
 import { VERSION, card, canPlace } from './engine.js';
 import { api as serverApi, createGameRequest, actionRequest, lifecycleRequest, millis, publicBoard, escapeHtml } from './storage.js';
 import {createTrial} from './trial.js';
-import {playRockEffects} from './effects.js';
+import {playRockEffects,actionNotice} from './effects.js';
 
 const app = document.querySelector('#app');
 let player = { id: '', nextAttempt: 1 };
@@ -550,6 +550,7 @@ function helpDialog() {
           <li>
             接通右側終點才會揭曉礦藏。
             金幣加分後繼續，找到金礦立即結束。
+            若本回合落石讓新翻開的金幣終點斷線，該次翻牌與金幣會撤銷；之後其他回合才斷線則保留。
           </li>
           <li>
             限時 5 分鐘；牌庫空後仍可使用手牌。
@@ -660,9 +661,7 @@ function submit(type, position) {
       } finally {presentation = null;}
     }
     await current();
-    const rocks = response.effects.filter(e => e.type === 'rock').length;
-    notice = rocks ? `遇到 ${rocks} 張落石，已更新礦坑。`
-      : mode === 'trial' ? '試玩操作完成，本局不記錄。' : '操作已由伺服器確認。';
+    notice = actionNotice(response.effects, mode === 'trial');
   });
 }
 function takeAction(position) {

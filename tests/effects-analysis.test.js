@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {rockFrames,playRockEffects} from '../frontend/src/effects.js';
+import {rockFrames,playRockEffects,actionNotice} from '../frontend/src/effects.js';
+import {newGame,act} from '../frontend/src/engine.js';
 import {baseline,scores,distribution,scenarios,firstRockProbability,rockCountProbability} from '../frontend/src/analysis.js';
 
 test('confirmed rock sequence shows newly placed road before removing it, then processes consecutive rocks', async () => {
@@ -37,4 +38,31 @@ test('PDF reference PMF/CDF and moments agree with the rounded input; draw model
   near(Array.from({length:14},(_,i)=>firstRockProbability(i+1)).reduce((a,b)=>a+b),1);
   near(Array.from({length:14},(_,i)=>(i+1)*firstRockProbability(i+1)).reduce((a,b)=>a+b),3.6);
   for(let n=0;n<=17;n++) near([0,1,2,3,4].reduce((sum,r)=>sum+rockCountProbability(n,r),0),1);
+});
+
+test('reconnecting multiple coin targets then consecutive rocks revokes only this turn before exhaustion', () => {
+  for (const previousCoin of [false,true]) {
+    const game=newGame('review',1,()=>.42,1000);
+    game.goldRow=0;
+    game.board={'2,1':'horizontal','2,3':'horizontal','2,4':'tee-down','3,4':'vertical','4,4':'bend-ur'};
+    game.placed=Object.keys(game.board);
+    game.hand=['horizontal'];
+    game.deck=['rock','rock'];
+    game.revealed=previousCoin ? [4] : [];
+    game.coins=previousCoin ? 1 : 0;
+    assert.equal(act(game,0,[2,2],2000),true);
+    const revoked=game.events.filter(event=>event.type==='unreveal');
+    assert.deepEqual(revoked.map(event=>event.row),previousCoin ? [2] : [2,4]);
+    assert.equal(game.coins,previousCoin ? 1 : 0);
+    assert.deepEqual(game.revealed,previousCoin ? [4] : []);
+    assert.equal(game.reason,'exhausted');
+    assert.equal(game.events.at(-1).type,'end');
+    const frames=rockFrames([],game.events);
+    assert.equal(frames.length,4, 'unreveal does not disrupt the two rock animations');
+    const message=actionNotice(game.events);
+    assert.match(message,/2 張落石/);
+    assert.match(message,/第 3 列終點恢復未翻開|第 3 列終點、第 5 列終點恢復未翻開/);
+    assert.match(message,/金幣已扣回/);
+    assert.doesNotMatch(actionNotice([{type:'future-effect'}],true),/撤銷/);
+  }
 });

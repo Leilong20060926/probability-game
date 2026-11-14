@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { toCsv } from '../src/csv.js';
 import { createPlayer } from '../src/players-repo.js';
-import { insertGame } from '../src/games-repo.js';
-import { gameStats, listGames } from '../src/admin-repo.js';
+import { insertEvents, insertGame } from '../src/games-repo.js';
+import { gameStats, listGames, exportEventRows } from '../src/admin-repo.js';
 import { newGame } from '../src/engine-adapter.js';
 
 test('toCsv adds a BOM, quotes fields with commas, and guards formula injection', () => {
@@ -72,4 +72,34 @@ test('gameStats distinguishes game count from distinct player count and aggregat
   const listed = listGames(db, { status: 'finished' }, 1, 10);
   assert.equal(listed.total, 2);
   assert.equal(listed.games.length, 2);
+});
+
+// 迴歸測試：Codex review 發現 reveal/unreveal 事件的目標列在 events 表／CSV
+// 裡是空的——insertEvents 之前只從 event.position 取 row/col，但 reveal／
+// unreveal 的列別是存在 event.row，不是 position。
+test('events.csv export keeps the target row for reveal and unreveal events', () => {
+  const db = openDb(':memory:');
+  const now = 1_000_000;
+
+  const player = createPlayer(db, now);
+  const game = newGame(player.id, 1, () => 0.3, now);
+  insertGame(db, game, null, now);
+
+  const events = [
+    { seq: 1, turn: 1, type: 'place', elapsedMs: 0, position: [2, 1], cardId: 'horizontal' },
+    { seq: 2, turn: 1, type: 'reveal', elapsedMs: 0, row: 2, reward: 'coin' },
+    { seq: 3, turn: 1, type: 'rock', elapsedMs: 0, removed: '2,1' },
+    { seq: 4, turn: 1, type: 'unreveal', elapsedMs: 0, row: 2 },
+  ];
+  insertEvents(db, game.id, events, 0);
+
+  const rows = exportEventRows(db, {});
+  const reveal = rows.find(r => r.type === 'reveal');
+  const unreveal = rows.find(r => r.type === 'unreveal');
+  const place = rows.find(r => r.type === 'place');
+
+  assert.equal(reveal.row, 2, 'reveal 的目標列不應該是空的');
+  assert.equal(unreveal.row, 2, 'unreveal 的目標列不應該是空的');
+  assert.equal(place.row, 2);
+  assert.equal(place.col, 1);
 });

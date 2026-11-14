@@ -1,8 +1,9 @@
 // Explicit, disposable practice mode. No fetch, cookies, or browser storage.
 import {newGame, act, abandon, checkTimeout} from './engine.js';
+import {uuid} from './uuid.js';
 
 export function createTrial() {
-  let playerId = crypto.randomUUID();
+  let playerId = uuid();
   let attempt = 0;
   let game = null;
 
@@ -28,7 +29,7 @@ export function createTrial() {
 
   return async function trial(path, {body = {}} = {}) {
     if (path === '/api/players/switch') {
-      playerId = crypto.randomUUID(); attempt = 0; game = null;
+      playerId = uuid(); attempt = 0; game = null;
       return {playerId,nextAttempt:1};
     }
     if (path === '/api/players') return {playerId,nextAttempt:attempt+1};
@@ -54,6 +55,7 @@ export function createTrial() {
     // Lifecycle observations are not collected in practice mode.
     return {game:view(), effects:game.events.slice(before).map(event => ({
       type:event.type, cardId:event.cardId, position:event.position, removed:event.removed,
+      row:event.row, reward:event.reward,
     }))};
   };
 }

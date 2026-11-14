@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {startTestServer} from '../backend/tests/helpers.js';
 import {api, ApiError, createGameRequest, actionRequest, lifecycleRequest, publicBoard} from '../frontend/src/storage.js';
 import {hashPassword} from '../backend/src/password.js';
+import {getGame,saveGame} from '../backend/src/games-repo.js';
+import {actionNotice} from '../frontend/src/effects.js';
 
 test('frontend transport: lost response retry, revision recovery, session isolation and authenticated CSV', async () => {
   const server = await startTestServer();
@@ -55,6 +57,26 @@ test('frontend transport: lost response retry, revision recovery, session isolat
     assert.equal(recorded.game.revision, beforeLifecycle.revision + 1);
     assert.equal(server.db.prepare('SELECT COUNT(*) AS n FROM events').get().n, eventsBefore + 1);
     assert.equal((await api('/api/games/current')).revision, recorded.game.revision);
+    // Deterministic in-memory fixture for the changed public effect contract.
+    const fixture=getGame(server.db,game.id);
+    fixture.board={'2,1':'horizontal','2,2':'horizontal','2,3':'horizontal'};
+    fixture.placed=Object.keys(fixture.board);
+    fixture.goldRow=0;
+    fixture.hand=['horizontal'];
+    fixture.deck=['rock','rock','vertical'];
+    fixture.coins=0;
+    fixture.revealed=[];
+    saveGame(server.db,fixture,Date.now());
+    const beforePlace=await api('/api/games/current');
+    const place=actionRequest(beforePlace,'place',0,[2,4]);
+    const rolledBack=await api(place.path,place.options);
+    assert.deepEqual(rolledBack.effects.filter(e=>e.type==='unreveal'),[{type:'unreveal',row:2}]);
+    assert.equal(rolledBack.game.coins,0);
+    assert.deepEqual(rolledBack.game.targets.find(t=>t.row===2),{row:2,revealed:false});
+    assert.match(actionNotice(rolledBack.effects),/金幣已扣回/);
+    const eventCount=server.db.prepare('SELECT COUNT(*) AS n FROM events').get().n;
+    assert.deepEqual(await api(place.path,place.options),rolledBack);
+    assert.equal(server.db.prepare('SELECT COUNT(*) AS n FROM events').get().n,eventCount);
     const latest = await api('/api/games/current');
     const end = actionRequest(latest, 'abandon');
     const finished = (await api(end.path, end.options)).game;

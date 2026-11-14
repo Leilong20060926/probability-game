@@ -1,4 +1,5 @@
 // Server transport; old localStorage records remain untouched.
+import {uuid} from './uuid.js';
 export class ApiError extends Error {
   constructor(status, payload) {
     super(payload?.error?.message || `伺服器回應 ${status}`);
@@ -22,17 +23,17 @@ export async function api(path, {body, headers = {}, keepalive = false, raw = fa
   return response.status === 204 ? null : response.json();
 }
 export function createGameRequest(deviceType) {
-  return {path:'/api/games', options:{body:{deviceType}, headers:{'Idempotency-Key':crypto.randomUUID()}}};
+  return {path:'/api/games', options:{body:{deviceType}, headers:{'Idempotency-Key':uuid()}}};
 }
 export function actionRequest(game, type, handIndex, position) {
-  const body = {actionId:crypto.randomUUID(), expectedRevision:game.revision, type};
+  const body = {actionId:uuid(), expectedRevision:game.revision, type};
   if (type !== 'abandon') body.handIndex = handIndex;
   if (type === 'place') [body.row, body.col] = position;
   return {path:`/api/games/${encodeURIComponent(game.id)}/actions`, options:{body}};
 }
 export function lifecycleRequest(game, type) {
   return {path:`/api/games/${encodeURIComponent(game.id)}/lifecycle`,
-    options:{body:{type, eventId:crypto.randomUUID()}, keepalive:true}};
+    options:{body:{type, eventId:uuid()}, keepalive:true}};
 }
 export const millis = value => typeof value === 'number' ? value : Date.parse(value);
 export const publicBoard = view => Object.fromEntries(view.board.map(c => [`${c.row},${c.col}`, c.cardId]));

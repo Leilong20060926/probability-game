@@ -31,6 +31,8 @@ npm run test:backend       # 後端測試
 
 玩家頁為 http://localhost:5174/，組員登入頁為 http://localhost:5174/admin.html。後台不內嵌帳密，登入後才能取得全體資料與下載 CSV；登出需要 CSRF token。
 
+手機區網試玩：電腦執行 `npm.cmd run backend` 並保持開啟，手機與電腦連同一 Wi-Fi，以 `http://電腦的Wi-Fi-IPv4位址:5174/` 開啟（手機不能使用 localhost，那會指向手機自己）。可用 `ipconfig` 查看電腦位址，Wi-Fi 更換或 DHCP 更新後位址可能改變。若連不上，檢查 Windows 是否允許 Node 的私人網路連入，以及 Wi-Fi 是否隔離裝置；不需要關閉整個防火牆。HTTP 本機試玩使用 COOKIE_SECURE=false；正式 HTTPS 才使用 true。這不是公網部署，外部網路不能直接使用此區網位址。
+
 開啟玩家頁會先詢問紀錄模式，尚未選擇前不呼叫遊戲 API：
 
 - **不記錄試玩**：使用同一套遊戲規則在頁面記憶體運作，不發送遊戲 API、不寫 localStorage，不列入後台統計或 CSV。重整／關閉即消失。

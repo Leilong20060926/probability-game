@@ -6,6 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openDb } from './db.js';
 import { sendJson } from './http.js';
 import { ApiError } from './errors.js';
+import { VERSION } from './engine-adapter.js';
+import { finalizeStaleVersionGames } from './stale-games.js';
 import { registerPlayerRoutes } from './routes/players.js';
 import { registerGameRoutes } from './routes/games.js';
 import { registerAdminRoutes } from './routes/admin.js';
@@ -90,6 +92,11 @@ function main() {
   const dbPath = process.env.DB_PATH || 'backend/data/game.db';
   const db = openDb(dbPath);
   const port = Number(process.env.PORT || 5174);
+
+  const finalized = finalizeStaleVersionGames(db, VERSION, Date.now());
+  if (finalized) {
+    console.log(`Finalized ${finalized} in-progress game(s) left over from a previous rules version.`);
+  }
 
   createServer(db).listen(port, '0.0.0.0', () => {
     console.log(`Backend (+static frontend): http://localhost:${port}`);

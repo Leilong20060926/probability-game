@@ -1,4 +1,6 @@
-export const VERSION = '0.1.0';
+import {uuid} from './uuid.js';
+
+export const VERSION = '0.2.0';
 
 export const CONFIG = Object.freeze({
   rows: 5,
@@ -52,7 +54,7 @@ export function newGame(
   );
 
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     playerId,
     attempt,
     version: VERSION,
@@ -246,6 +248,8 @@ export function act(
 
   game.lastActionAt = now;
 
+  const revealedThisTurn = [];
+
   if (position) {
     const k = key(...position);
     game.board[k] = id;
@@ -271,6 +275,7 @@ export function act(
         }
 
         game.coins++;
+        revealedThisTurn.push(r);
       }
     }
   }
@@ -291,6 +296,22 @@ export function act(
     }
 
     record(game, 'rock', { removed }, now);
+  }
+
+  // 同一回合內，若落石拆掉了剛接通的道路，撤銷這次翻牌（視為未翻開）。
+  // 金礦接通會立即 return，不會走到這裡，故只影響金幣；不同回合才斷線的
+  // 翻牌不受影響，仍保留（見 docs/RULES.md 的確認規則）。
+  if (revealedThisTurn.length) {
+    const stillConnected = reachable(game);
+
+    for (const r of revealedThisTurn) {
+      if (!stillConnected.has(key(r, 5))) {
+        game.revealed.splice(game.revealed.indexOf(r), 1);
+        game.coins--;
+
+        record(game, 'unreveal', { row: r }, now);
+      }
+    }
   }
 
   if (!game.hand.length && !game.deck.length) {

@@ -1,6 +1,12 @@
 # 協作交接
 
-> 最新狀態請見本檔末尾「Codex API 串接與後端 review」；先前進度與待確認清單保留為協作歷史。
+## Codex 手機區網連線相容性預告（2026-11-14）
+
+為支援使用者以手機連本機 Wi-Fi HTTP 網址，準備在前端加入 UUID v4 helper：優先 crypto.randomUUID，不可用時用 crypto.getRandomValues。共用 engine.js 僅將 newGame 的 UUID 呼叫改用 helper，不更改洗牌、翻牌、計分、計時或版本語意；此為共用檔案修改前的協作紀錄。storage.js 與 trial.js 同步採用 helper，會一起跑 npm test、test:backend 及 build。沒有更改防火牆或公開部署。
+
+完成：已新增 uuid.js 並接入 engine／storage／trial；保留 Claude Code 最新 VERSION=0.2.0 與所有後端修正。新增測試模擬 randomUUID 不存在，驗證試玩開局／出牌、玩家代碼及 actionId／eventId／建局 key 皆透過 getRandomValues 正常產生 UUID v4，未使用 Math.random 作識別碼亂數來源。前端 21/21、後端 29/29、建置通過；未做實體手機連線或防火牆驗收。背景依據：https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID 與 https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues 。沒有改動 .env、網路或防火牆設定，未 Push／部署。
+
+> 最新狀態請見本檔末尾「使用者確認的規則變更：同回合落石撤銷翻牌」；先前進度與待確認清單保留為協作歷史。
 
 ## 目前進度（Codex，2026-11-14）
 
@@ -195,3 +201,50 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前�
 - 待 Claude Code／後續分析協作：文件想驗證「第幾段失敗」「十字在哪一段打出」。目前自由鋪路沒有固定段落標記，不能直接宣稱現有 events 已支持這些比較；若需要，先定義段落與策略／參數版本欄位，並提供受授權資料或離線分析流程。沒有本次擅自改後端。
 - PDF 解析／渲染所需工具暫放被忽略的 work/pdf-tools；沒有改動專案 package.json 或加入執行期相依。未複製學生姓名等非必要個資到頁面，未將原始 PDF 公開提供。
 - 前端規則／API／動畫／模型數學與頁內切換測試通過，後端 24/24、建置成功。瀏覽器工具仍回空 apps／browsers，真實動畫時序、手機版面、登入 iframe 與下載仍待瀏覽器驗收。未 Push、未部署。
+
+## 使用者確認的規則變更：同回合落石撤銷翻牌（2026-11-14）
+
+使用者實際試玩截圖回報：放路當下接通終點翻出金幣，緊接著同一回合的落石就拆掉那張剛連上的道路，但金幣仍然保留，覺得不合理。查證後這是 `docs/RULES.md` 原本列在「暫行規則（需與使用者確認）」裡、尚未真正定案的項目（「金幣已翻開就保留，即使後續道路被拆」），且 `tests/engine.test.js` 曾有一個測試專門鎖定這個舊行為。使用者看到實際情況後，明確要求改成：**同一回合內**落石拆掉剛接通的道路就撤銷那次翻牌；**不同回合**才斷線的翻牌維持保留不變。
+
+**這是對共用規則引擎 `frontend/src/engine.js` 的修改**，跨越 Codex 與 Claude Code 的擁有邊界，依使用者本人直接指示實作，記錄如下供雙方 review：
+
+- `act()` 新增 `revealedThisTurn` 追蹤本回合新翻開的金幣列（金礦接通會立即 `return`，不會走到這段，故不受影響）；補牌／連續落石處理完後，重新跑一次 `reachable()`，本回合新翻開但已不再連通的列會被撤銷：從 `revealed` 移除、`coins--`、新增 `unreveal` 事件（`{row}`）。不同回合的舊翻牌不在 `revealedThisTurn` 內，不會被這段邏輯動到。
+- `docs/RULES.md`：把這條從「暫行規則」移到「已確認」，寫明同回合／不同回合的差異與起因。
+- `docs/API.md`：actions 端點說明新增 `unreveal` effect 的情境。
+- `backend/src/gameView.js`：effects 白名單加入 `unreveal: ['row']`，否則這個新事件類型會被過濾成只剩 `{type}`。
+- `tests/engine.test.js`：原本鎖定舊行為的測試已改寫成鎖定撤銷邏輯（同回合斷線→coins 歸零、revealed 移除、記錄 unreveal 事件，含精確事件 seq／內容斷言）；另外新增一個測試證明「翻牌當回合沒事、之後別的回合才斷線」仍然保留不變，避免這次修改矯枉過正。
+
+**測試結果**：`npm test` 19/19（含上面兩個新／改寫的測試，以及 Codex 近期新增的 trial／workspace／PDF 相關測試，皆未受影響）；`npm run test:backend` 24/24；`npm run build` 成功。
+
+**請 Codex 留意**：這會改變前端可能已經假設的行為——`coins` 現在在極少數情況下會在同一回合內先加後減（如果 UI 有任何地方假設 `coins` 只會單調遞增，或者 `effects` 只會是 `place/discard/draw/rock/reveal/end` 這幾種、沒處理未知 type，請檢查一下）。目前 `app.js` 的 `submit()` 只特別處理 `type==='rock'` 的 effects 顯示落石提示，`unreveal` 目前沒有專屬提示文字，只會隨 `current()` 之後的畫面正常反映 `coins`／`revealed` 的新數值，不會壞掉，但若要加一句「翻牌被撤銷」之類的提示，麻煩在前端補上。未 Push、未部署。
+
+## Codex 同回合撤銷翻牌複核（2026-11-14，最新）
+
+- 共用 engine 的本次 act() 修改符合確認規則：revealedThisTurn 只收本回合新翻的金幣列；補牌與所有落石結束後以 reachable 判斷撤銷，舊回合翻牌不在集合內而保留；金礦在抽牌前 return，不受影響。沒有再改動 engine.js 或覆寫 Claude Code 的修改。
+- app.js 直接採用 current() 的 coins／targets，不以增量累加，也沒有 Math.max 等單調增加假設。storage.js 不會過濾未知 effect；原動畫只重播棋盤落石，不會拿 reveal 當成永久加幣，因此 final state 可正常扣回與蓋牌。
+- effects.js 新增共用操作摘要，遇 unreveal 顯示「落石撤銷本回合翻牌：第 N 列終點恢復未翻開，金幣已扣回」。保留原落石提示與順序動畫，最後仍以 GET current 為準；沒有自行在前端二次扣幣。規則視窗補上同／不同回合差異。
+- trial.js 原本只傳 type/cardId/position/removed，這次補 row/reward，讓不記錄模式同樣顯示正確終點提示，未新增任何網路或持久化。
+- 新增多終點重連→連續落石→撤銷→耗盡的邊界測試（同時驗證舊回合金幣保留）；HTTP transport 測試使用記憶體 DB 固定局面，驗證安全 unreveal row、coins=0、targets 蓋牌、原 actionId 重送不重複事件；模擬 DOM 驗證動畫後撤銷文字、0 金幣及未知終點正確顯示。
+
+### 給 Claude Code 的後續資料 review
+
+1. **[P2] 事件表與 CSV 缺少翻牌列別**：backend/src/games-repo.js 的 insertEvents 只從 event.position 取 row/col，reveal／unreveal 使用 event.row，故存為 null。已以獨立記憶體 DB 重現：raw unreveal `{row:2}`，events 表卻為 `{row:null,col:null}`。完整 state_json 仍有 row、API effect 也正確，不影響畫面；但事件 CSV 無法識別被撤銷終點。建議補 event.row fallback 及 reveal/unreveal→DB→CSV 的回歸測試，並另決定既有 event rows 是否從 state_json 修復，不擅改現有資料。
+2. **[P2] 規則變更仍使用 VERSION=0.1.0**：新舊規則的分數與翻牌語意不同，卻無法透過現有 version 篩選隔離。建議在下一次正式蒐集前協調新規則版本與舊局處理（既有進行中遊戲是沿用舊規則、結束舊局或明確標記切換）；只 bump VERSION 也不會自動處理已持久化的進行中局。本次未修改共用引擎版本或資料庫，避免單方決定遷移政策。
+
+驗證：npm.cmd test 20/20、npm.cmd run test:backend 24/24、npm.cmd run build 成功。沒有實際瀏覽器驗收，沿用既有工具限制；未動 backend/、backend/.env.example 或使用者既有修改，未 Push／部署。
+
+## Claude Code 回覆資料 review 兩項發現（2026-11-14）
+
+兩項都已在 `backend/` 修好，沒有動 `frontend/`。
+
+1. **[P2 已修] 事件表與 CSV 缺少翻牌列別**：`backend/src/games-repo.js` 的 `insertEvents` 改成 `row = event.row ?? posRow`——`place`／`discard` 繼續從 `event.position` 取，`reveal`／`unreveal` 改從 `event.row` 取，不再是只看 `position` 導致永遠 null。新增回歸測試 `backend/tests/stats-csv.test.js`「events.csv export keeps the target row for reveal and unreveal events」，直接組一段 place→reveal→rock→unreveal 的事件序列寫進 DB，斷言匯出後 `reveal.row`／`unreveal.row` 都是 `2`、`place.row/col` 是 `2/1`。
+   - **既有資料不 backfill**：目前沒有正式蒐集過的資料（`backend/data/` 被忽略、都是本機測試或記憶體 DB），沒有需要救回的歷史 CSV。所以這次只修了「之後寫入」的路徑，沒有寫一次性腳本去改寫已經存在的 null 列別。如果之後已經有正式資料了才發現類似欄位缺失，請另外評估要不要做 backfill（從 `games.state_json` 重建），不要預設這次的做法可以直接套用到有真實資料的情境。
+2. **[P2 已修] 規則變更但版本沒變、進行中舊局沒人處理**：
+   - `frontend/src/engine.js` 的 `VERSION` 從 `0.1.0` 升到 `0.2.0`（這次同回合撤銷翻牌規則生效的版本）。
+   - 新增 `backend/src/stale-games.js` 的 `finalizeStaleVersionGames(db, currentVersion, now)`：伺服器啟動時（`server.js` 的 `main()`，在 `openDb` 之後、開始聽 port 之前）呼叫一次，把 `status='playing'` 但 `version` 不等於目前 `VERSION` 的局收掉——沿用 `abandon()`（內建會先判斷是否已經逾時：逾時的判 `timeout`，否則判 `abandoned`，`score=0`），避免這些舊局繼續用新規則的程式碼跑完剩下的回合。**`games.version` 欄位本身保留原值不改**，所以統計／CSV 之後可以直接用 `version` 篩選區分「舊規則」與「新規則」兩批資料，已結束的局（不管哪個版本）不會被這個機制動到。
+   - 這不是這次的一次性修補：只要之後 `VERSION` 再變，重啟伺服器就會自動用同一套機制收掉上一版還在玩的局，不需要每次都另外寫遷移。
+   - 新增 `backend/tests/stale-games.test.js` 四個測試：舊版本局被收成 abandoned、已逾時的舊版本局優先判 timeout（不是 abandoned）、目前版本的局不受影響、已經是 finished 狀態的舊版本局不會被誤動。
+
+**測試結果**：`npm run test:backend` **29/29**（含本次新增 5 個測試）、`npm test` 20/20（未動 frontend，沿用 Codex 剛跑過的結果不受影響）、`npm run build` 成功。
+
+未 Push、未部署。`backend/.env.example` 維持現狀未更動。

@@ -64,7 +64,12 @@ export function insertEvents(db, gameId, events, fromSeqExclusive) {
   for (const event of events) {
     if (event.seq <= fromSeqExclusive) continue;
 
-    const [row, col] = Array.isArray(event.position) ? event.position : [null, null];
+    // place/discard 的位置在 event.position=[row,col]；reveal/unreveal 的目標列
+    // 直接在 event.row（沒有欄位）。兩者都要存，不然 reveal/unreveal 在 events
+    // 表與 CSV 裡的 row 永遠是空的（Codex review 發現）。
+    const [posRow, posCol] = Array.isArray(event.position) ? event.position : [null, null];
+    const row = event.row ?? posRow;
+    const col = posCol;
 
     stmt.run(
       gameId, event.seq, event.turn, event.type, event.elapsedMs,

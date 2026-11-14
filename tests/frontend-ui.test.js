@@ -37,6 +37,7 @@ test('player UI blocks uncertain mutations, retries same create key, and recover
   let game = null;
   let createCalls = [];
   let conflict = false;
+  let actionCalls = 0;
   const requests = [];
   globalThis.fetch = async (path, options) => {
     const body = options.body && JSON.parse(options.body);
@@ -52,8 +53,20 @@ test('player UI blocks uncertain mutations, retries same create key, and recover
       return Response.json(game,{status:201});
     }
     if (path.endsWith('/actions')) {
+      actionCalls++;
+      if (actionCalls === 2) {
+        game = {...game,revision:4,turn:4,coins:0,deckRemaining:15,
+          hand:['vertical','vertical']};
+        return Response.json({game,effects:[
+          {type:'place',position:[2,4],cardId:'horizontal'},
+          {type:'reveal',row:2,reward:'coin'},
+          {type:'rock',removed:'2,4'},
+          {type:'draw',cardId:'vertical'},
+          {type:'unreveal',row:2},
+        ]});
+      }
       conflict = true;
-      game = {...game,revision:1,turn:1};
+      game = {...game,revision:3,turn:3,board:[1,2,3].map(col=>({row:2,col,cardId:'horizontal'}))};
       return Response.json({error:{code:'REVISION_CONFLICT',message:'conflict'},game},{status:409});
     }
     throw new Error('Unexpected path ' + path);
@@ -101,6 +114,16 @@ test('player UI blocks uncertain mutations, retries same create key, and recover
     assert.match(html,/已同步最新狀態/);
     assert.equal(button('discard').disabled,true);
     assert.equal(requests.filter(r=>r.path.endsWith('/actions')).length,1);
+    nodes.find(n=>n.dataset.hand==='0').onclick();
+    const endpointRoad=nodes.find(n=>n.dataset.cell==='2,4');
+    assert.equal(endpointRoad.disabled,false);
+    endpointRoad.onclick();
+    await settle();
+    assert.match(html,/落石撤銷本回合翻牌/);
+    assert.match(html,/第 3 列終點恢復未翻開，金幣已扣回/);
+    assert.match(html,/已得金幣[\s\S]*?<strong>\s*0<small>/);
+    assert.match(html,/第 3 列第 6 欄：未知終點/);
+    assert.equal(button('end').disabled,false);
     // Synchronize a finished timeout through the current-state path.
     game = {...game,status:'finished',reason:'timeout',endedAt:game.deadlineAt,serverNow:game.deadlineAt};
     // Existing UI clock reaches zero, then polls the server for authoritative finish.

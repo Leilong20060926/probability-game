@@ -36,7 +36,7 @@
 
 `{ actionId, expectedRevision, type: "place"|"discard"|"abandon", handIndex?, row?, col? }`
 
-伺服器原子驗證及處理：出牌→揭終點→金礦結束，否則補牌與連續落石→耗盡結算。
+伺服器原子驗證及處理：出牌→揭終點→金礦結束，否則補牌與連續落石→耗盡結算。**2026-11-14 規則變更**：若同一回合的落石（補牌階段）拆掉了剛接通的道路，該次翻牌會被撤銷（金幣數扣回、`revealed` 移除該列），`effects` 會包含 `{type:"unreveal", row}`；這只影響同回合內的情況，不同回合才斷線的翻牌仍保留不變。詳見 `docs/RULES.md` 的確認規則與 `frontend/src/engine.js` 的 `act()`。
 
 同一 actionId 重試不得再執行；不同 body 重用 key 應拒絕。expectedRevision 衝突回 409 與最新安全狀態，避免多分頁重複出牌。無效行動不消耗卡牌。
 
@@ -165,3 +165,7 @@ gameId、seq（局內唯一遞增）、turn、type、elapsedMs、decisionMs（pl
 持久化：
 
 資料庫請使用持久磁碟或雲端服務，加入遷移與備份說明。需要驗證重啟仍在、兩裝置集中、重試不重複、匯出開檔核對。後端框架與資料庫由 Claude Code 提案。
+
+規則版本與進行中舊局（2026-11-14 定案）：
+
+`frontend/src/engine.js` 的 `VERSION` 每次規則有實質變更（像同回合撤銷翻牌這種會改變分數／事件語意的變更）就要 bump；每局建立時的 `version` 欄位凍結，之後不會被改寫，統計／CSV 可以直接用 `version` 篩選區分不同規則下的資料。伺服器啟動時會呼叫 `backend/src/stale-games.js` 的 `finalizeStaleVersionGames`，把 `status=playing` 但 `version` 不是目前版本的局收掉（已逾時判 `timeout`，否則判 `abandoned`），避免舊局用新規則的程式碼繼續跑完剩下的回合。這個機制是通用的，每次 `VERSION` 再變動都會自動套用，不需要每次另外寫一次性遷移。

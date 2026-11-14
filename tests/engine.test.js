@@ -211,7 +211,7 @@ test(
 );
 
 test(
-  'uncovered coin persists after rock but disconnected roads are not reachable',
+  'same-turn rockfall that disconnects the just-revealed road revokes that reveal',
   () => {
     const g = fresh();
 
@@ -227,7 +227,56 @@ test(
 
     act(g, 0, [2, 4], 2000);
 
+    assert.equal(g.coins, 0);
+    assert.deepEqual(g.revealed, []);
+    assert.equal(
+      reachable(g).has('2,5'),
+      false,
+    );
+    assert.deepEqual(
+      g.events.filter(e => e.type === 'unreveal'),
+      [{
+        seq: 5,
+        turn: 1,
+        type: 'unreveal',
+        elapsedMs: 1000,
+        row: 2,
+      }],
+    );
+  },
+);
+
+test(
+  'a reveal that survives its own turn stays permanent even if a later rockfall disconnects it',
+  () => {
+    const g = fresh();
+
+    g.goldRow = 0;
+    g.board = {
+      '2,1': 'horizontal',
+      '2,2': 'horizontal',
+      '2,3': 'horizontal',
+    };
+    g.placed = Object.keys(g.board);
+    g.hand = ['horizontal', 'vertical'];
+    g.deck = ['vertical', 'rock', 'bend-dr'];
+
+    act(g, 0, [2, 4], 2000);
+
     assert.equal(g.coins, 1);
+    assert.deepEqual(g.revealed, [2]);
+
+    act(g, 0, null, 3000);
+
+    assert.equal(
+      g.events.filter(e => e.type === 'rock').length,
+      1,
+    );
+    assert.equal(
+      g.coins,
+      1,
+      '斷線發生在不同回合，先前的翻牌不應被撤銷',
+    );
     assert.deepEqual(g.revealed, [2]);
     assert.equal(
       reachable(g).has('2,5'),

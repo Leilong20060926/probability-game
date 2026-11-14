@@ -46,6 +46,7 @@ const FIELDS_BY_TYPE = {
   draw: ['cardId'],
   rock: ['removed'],
   reveal: ['row', 'reward'],
+  unreveal: ['row'],
   end: ['reason', 'score'],
   hidden: [],
   visible: [],
