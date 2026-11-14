@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>組員後台 · 黃金探勘所</title><link rel="stylesheet" href="/src/style.css"></head>
+<body>
+<main class="admin-page">
+  <p id="back-player"><a href="/">← 回玩家頁</a></p><h1>組員後台</h1>
+  <p>僅限授權組員查看伺服器資料。</p>
+  <form id="login">
+    <label>帳號 <input name="username" autocomplete="username" required></label>
+    <label>密碼 <input name="password" type="password" autocomplete="current-password" required></label>
+    <button>登入</button>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <section id="authorized" hidden>
+    <button id="logout">登出</button>
+    <form id="filters">
+      <label>版本 <input name="version"></label>
+      <label>來源 <select name="source"><option value="">全部</option><option>human</option></select></label>
+      <label>模式 <select name="mode"><option value="">全部</option><option>server</option><option>local</option><option>unverified_local</option></select></label>
+      <label>狀態 <select name="status"><option value="">全部</option><option value="playing">進行中</option><option value="finished">已結束</option></select></label>
+      <label>結束原因 <select name="reason"><option value="">全部</option><option value="gold">金礦</option><option value="timeout">超時</option><option value="exhausted">耗盡</option><option value="abandoned">提前結束</option></select></label>
+      <button>套用篩選／重新整理</button>
+    </form>
+    <div id="stats"></div>
+    <p><button data-export="export">下載局次 CSV</button> <button data-export="events">下載事件 CSV</button></p>
+    <p id="page-info"></p>
+    <div class="table-scroll"><table><thead><tr><th>遊戲</th><th>玩家</th><th>次數</th><th>狀態</th><th>結束原因</th><th>分數</th><th>回合</th><th>耗時（秒）</th></tr></thead><tbody id="games"></tbody></table></div>
+    <p><button id="previous">上一頁</button> <button id="next">下一頁</button></p>
+  </section>
+</main><script type="module" src="/src/admin.js"></script>
+</body></html>

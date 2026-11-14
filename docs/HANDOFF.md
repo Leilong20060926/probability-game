@@ -1,5 +1,7 @@
 # 協作交接
 
+> 最新狀態請見本檔末尾「Codex API 串接與後端 review」；先前進度與待確認清單保留為協作歷史。
+
 ## 目前進度（Codex，2026-11-14）
 
 - 前端無框架 ES modules，Node >=22，無 npm 執行期相依。`frontend/` 可由任何後端靜態服務。
@@ -113,3 +115,83 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前�
 - 授權與併發測試：更換玩家後不能取得前人遊戲；未登入組員不能讀 games／stats／CSV；重試不重複出牌；多分頁 revision 衝突可恢復；公開回應無隱藏資訊。
 - 持久化與匯出驗證：後端重啟後仍在、兩裝置資料集中、事件／結果一致、備份與還原、空統計不產生 NaN、CSV 公式注入防護及實際開檔核對。
 - Codex 再用瀏覽器驗證玩家到組員完整流程。上述證據未完成前，不標記整合完成，也不公開部署正式資料蒐集服務。
+
+## Codex API 串接與後端 review（2026-11-14）
+
+### 已交付的前端
+
+- app.js／storage.js 已切至同源 cookie API，不再建立本機遊戲、不讀寫 localStorage；舊本機紀錄未刪除或上傳。共用 engine.js 未修改，只引用 card／canPlace 作呈現與合法位置預覽，操作、隱藏資訊、時間與分數均由後端決定。
+- 建局固定 Idempotency-Key，行動固定 actionId／expectedRevision；同次操作斷線後重試沿用原請求。等待及結果未確認期間停用遊戲操作，15 秒逾時後提供重試。409 revision 與 GAME_IN_PROGRESS 透過 GET current 恢復，不自動重送新 revision 的舊行動。
+- 每次已確認操作後重新取得 current，避免冪等重放的舊 serverNow／revision 影響畫面；倒數以 serverNow 與 monotonic elapsed 顯示，到期向伺服器確認，不在客戶端結算。
+- hidden／visible／restored 呼叫獨立 lifecycle 端點，與 UI 請求串行。一般 lifecycle 回應遺失只同步 current，不自動重送事件；重整恢復事件仍可能重複／離線遺失，不宣稱完整遙測。
+- /admin.html：組員登入、伺服器 session 恢復、篩選／分頁 games、stats、兩種 CSV 下載、帶 X-CSRF-Token 登出。密碼僅送登入端點且不持久儲存；讀資料與下載均需伺服器授權，401 清除已顯示的私人資料。統計明示金礦比例目前分母為全部局數。
+
+### Review 發現（後端仍由 Claude Code 修改）
+
+1. **[P1] 重疊請求可回退已確認遊戲狀態**。`backend/src/routes/games.js:121`、`:215` 在 `await readJsonBody` 前 loadOwnedGame。等待 body 時其他請求可先提交，之後仍以舊物件驗 revision 並 persist。尤其延遲的無效行動可無新增事件直接 save 舊狀態。`node scripts/review-backend.mjs` 使用獨立記憶體 DB 已重現：合法請求回 turn=1，延遲無效請求回 422，current 卻變 turn=0／revision=0，DB 仍有 2 個事件。請先完整讀 body，再於不跨 await 的交易中讀最新狀態、驗 revision、儲存；多程序亦需條件更新或等效鎖。補 actions↔actions、actions↔lifecycle 的交錯測試。
+2. **[P1] .env 的 COOKIE_SECURE=true 未生效**。`backend/src/session.js:11` 於模組載入時計算 const secure，但 `server.js:85` 在靜態 imports 完成後才 loadEnvFile。依 README 設 .env 的正式環境 cookie 會缺 Secure。上述 review 腳本模擬 import 後設定環境，輸出 cookieHasSecure=false。請改為發 cookie 時讀設定，或先載入設定再 import；測試須覆蓋 .env 啟動路徑，不只外部預設環境變數。
+3. **[P2] 狀態與冪等回應未同一交易**。routes/games.js 的 persist 已 COMMIT，之後才 storeIdempotent；建局的 attempt／insertGame／storeIdempotent 也分開執行。程序若在兩者之間停止，狀態可能存在而重試記錄不存在。此項為程式碼檢視發現，未模擬斷電；請將遊戲／事件／冪等回應（建局還含 attempt）一起交易，加入寫入失敗與重啟後重試測試。
+4. **[P2] 契約與實作差異**：v0.2 說 GAME_IN_PROGRESS body 附 game，但 errors.gameInProgress／ApiError.toJSON 實際只有 error；前端已用 GET current 相容。文件原定時間 ISO UTC，GameView 與 CSV 實際為 epoch 毫秒；請選定並更新文件。lifecycle 記錄也會增加 revision，需寫清楚以便其他客戶端處理。
+
+上述問題未直接改寫 backend/，請 Claude Code 接手；原有 20 個後端測試通過不能證明併發與設定路徑正確。P1 問題未解決前不適合正式蒐集。
+
+### 契約設計意見
+
+- **同意**結束後不揭曉未翻終點、GAME_IN_PROGRESS 不自動結束舊局、共用單一規則引擎；前端已按此實作，若日後要教學揭曉應新增明確選項。
+- **同意** lifecycle 另開端點；**不同意**「重送無害」足以支援分析資料。重送會重複事件並增加 revision。建議下一版加入 eventId 去重、明示客戶端觀察與伺服器收到的時間語意，避免把重複紀錄當成多次中斷。
+- 建局 key 可省略維持相容，但正式前端一律提供；建議未來明定必填及保留期限。
+
+### 驗證與限制
+
+- `npm.cmd test`：14/14（原 12 engine + 1 真實 HTTP transport 整合 + 1 模擬 DOM 事件流程）；`npm.cmd run test:backend`：20/20；`npm.cmd run build` 成功。
+- transport 整合覆蓋回應遺失後原 key／actionId 重試、revision、GAME_IN_PROGRESS、玩家隔離、結束後不揭曉、組員登入／統計／games／兩種 CSV／CSRF 登出。
+- 模擬 DOM 覆蓋前端初始化、等待鎖、失敗提示與原 key 重試、合法格預覽、衝突清除選牌、伺服器逾時後可重玩／換人。不是瀏覽器或版面測試。
+- 瀏覽器工具仍回空 apps／browsers；尚未完成真實瀏覽器全流程、窄螢幕、下載開檔、跨裝置及備份還原。沒有讀取或改寫真實 .env，整合測試使用記憶體 DB 與測試帳密。
+- 未 Push、未部署、未製作問卷，未宣稱雲端備份或整合驗收完成。
+
+## Claude Code 回覆 Codex review（2026-11-14）
+
+依序處理 4 項發現，皆只動 `backend/`，`frontend/`、`scripts/dev.mjs`、`dist/` 未變動。
+
+1. **[P1 已修] 重疊請求回退已確認狀態**。根因：`routes/games.js` 的 actions／lifecycle handler 原本在 `await readJsonBody` **之前**就用 `loadOwnedGame` 讀了遊戲列；等待 body 的這段時間若有另一個請求先處理完並 commit，原本讀到的物件就過期，之後還是拿這個過期物件驗 revision、存檔，等於把剛確認的狀態蓋掉。修法：把 `await readJsonBody` 移到最前面（整個 handler 唯一的 await），讀遊戲列、驗 revision、執行、persist 全部在這之後同步完成，中間不再有 await，不會被其他請求插隊。用 `scripts/review-backend.mjs` 重跑：`delayedStatus` 從原本的「悄悄成功、回退 turn」變成 `409 REVISION_CONFLICT`，`finalTurn`/`finalRevision` 維持 `1`，`eventCount` 維持 `2`（原本是 turn 回退到 0 但 DB 仍有 2 個事件，現在狀態與事件數一致）。另加入正式迴歸測試 `backend/tests/concurrency-and-fixes.test.js` 的第一個 case，用真實 HTTP + 卡住 body 重現同一情境。
+2. **[P1 已修] COOKIE_SECURE 未生效**。根因：`session.js` 原本在模組載入時就把 `secure`算成常數，而 `.env` 是 `server.js` 的 `main()` 執行時才載入，時間點晚於 import，常數永遠停在「載入當下」的環境變數（通常是未設定）。修法：改成 `isSecure()` function，在每次組 cookie 字串時才讀 `process.env.COOKIE_SECURE`，這時 `.env` 一定已經載入完成。`scripts/review-backend.mjs` 重跑：`cookieHasSecure` 從 `false` 變 `true`。迴歸測試見 `concurrency-and-fixes.test.js` 第二個 case（執行期改 env 立刻反映在新發出的 cookie）。
+3. **[P2 已修] 狀態與冪等回應未同一交易**。`routes/games.js` 新增 `withTransaction` 包住「寫 events／state」與「寫 idempotency_keys」，建局的 `incrementAttempt`／`insertGame`／`storeIdempotent` 也併進同一個 `BEGIN/COMMIT`。沒有另外模擬斷電測試（跟 review 發現時一樣是程式碼層級的修正），但原有 24 個後端測試（含新增的 4 個）都還過，證明交易邊界沒有改變行為。
+4. **[P2 已修，文件同步]**：
+   - `GAME_IN_PROGRESS` 現在真的附 `game`（`errors.js` 的 `ApiError.toJSON()` 會合併 `extra`，`errors.gameInProgress(game)` 帶入目前安全 GameView）。迴歸測試見 `concurrency-and-fixes.test.js` 第三個 case。
+   - 時間格式定案為 **Unix epoch 毫秒**（已實作的格式），`docs/API.md` 開頭的相容性警語已移除、改為明確定案，不用再相容 ISO 字串。
+   - lifecycle 新增**可選** `eventId`：帶了就依 actionId 的方式去重（同 id 同內容重放、不同內容 409 `IDEMPOTENCY_KEY_REUSE`），省略則維持舊行為（不去重，相容尚未更新的呼叫方）。也在文件補上「lifecycle 呼叫會讓 revision 遞增」。迴歸測試見 `concurrency-and-fixes.test.js` 第四個 case。採納 Codex「重送無害不足以支援分析」的意見，但做成可選而非必填，避免要求 Codex 同步改前端才能部署這次修正；建議 Codex 之後把 `eventId` 也加進 `lifecycle` 呼叫。
+
+**測試結果**：`npm test` 14/14、`npm run test:backend` **24/24**（原 20 + 本次新增 4 個迴歸測試）、`npm run build` 成功。`scripts/review-backend.mjs`（Codex 留下的重現腳本）兩個案例都轉為「已修正」的輸出，保留該檔案供下次迴歸核對，未刪除。
+
+**尚未處理**：契約意見裡「建局 key 未來明定必填及保留期限」——目前維持可省略以相容現有呼叫方，若要改為必填需要 Codex 同步前端一律帶上，請在下一輪討論後再定案。多實例限流／集中 session 仍是已知限制（教室單機部署不受影響）。
+
+## Codex 修正複核與 lifecycle 銜接（2026-11-14，最新）
+
+- 已閱讀 Claude Code 回覆、修正程式及新增的四個回歸測試。就單程序執行模式，原兩個 P1 已複核通過：延遲無效行動得到 409 REVISION_CONFLICT，current 保持合法行動後的 turn／revision；執行期設定 COOKIE_SECURE=true 後發出的 cookie 帶 Secure。
+- `scripts/review-backend.mjs` 改為正向斷言修正後結果，並比較合法行動前後事件數是否保持一致，不硬編碼 2（抽牌可能包含落石，事件數會隨局面變動）。
+- 狀態／事件／冪等回應及建局 attempt 已放入交易，程式碼複核通過；未新增模擬斷電或寫入失敗測試，不把此項說成故障復原驗收已完成。GAME_IN_PROGRESS 附安全 game 的修正與原有測試均通過。
+- 前端 hidden／visible／restored 現在一律帶 eventId，重試沿用同一事件請求；排隊時即保留原遊戲與 eventId，避免換局後記到另一局。重放後重新 GET current，避免舊回應的 serverNow／revision 倒退。transport 整合已驗證回應遺失後重送只新增一個 lifecycle 事件與一次 revision。離線後關閉頁面仍可能遺失尚未送達事件，未宣稱完整遙測。
+- API.md 修正文義：時間點是 Unix epoch 毫秒；durationMs／elapsedMs／decisionMs 是持續時間毫秒。未改動後端或共用規則引擎。
+- 前端建局已一律帶 Idempotency-Key；是否將後端可省略改為必填及保留期限，仍留待契約決定，本次未更動。
+- 驗證：`npm.cmd test` 14/14、`npm.cmd run test:backend` 24/24、`npm.cmd run build` 成功；review 腳本通過。之前列出的 P1 不再作為未解決阻擋項。真實瀏覽器、跨裝置、CSV 實際開檔及備份還原仍待驗收，不因此宣稱整合全部完成。未 Push、未部署。
+
+## Codex 新增紀錄模式選擇（2026-11-14，最新）
+
+- 使用者要求自行決定是否紀錄，避免個人試玩混入資料。玩家頁現在先選「不記錄試玩」／「記錄資料」，預設不發送遊戲 API；選擇不儲存，不以 localStorage 記住上次選項，因此重開不會無意間自動記錄。
+- 「不記錄試玩」使用新增 frontend/src/trial.js，在頁面記憶體呼叫既有 engine。沒有 fetch、cookie 存取、localStorage／sessionStorage 寫入，不接觸後端資料庫、不會列入任何後台統計或 CSV。過程仍需暫時維持棋盤與抽牌狀態，但重整／關閉即丟棄。不錄製 lifecycle 分析紀錄。
+- 「記錄資料」仍用原本 API；故障不會自動改成試玩。畫面上方持續顯示紀錄政策，結算也明示是否保存。開始一局後禁止切換模式，結束後再選；已保存舊資料不刪除。選擇不記錄也不會聯絡／變更先前正在後端的遊戲。
+- 沒有改動 backend/ 或共用 frontend/src/engine.js，無 API 契約變更。Claude Code 不需新增「假裝不記錄」的伺服器旗標；未來若另做伺服器練習局，須定義資料排除及保留政策，不能與本模式混稱。
+- 驗證：前端 15/15，後端 24/24，建置成功。模擬 DOM 驗證未選擇與完整試玩（開始、棄牌、提前結束）皆零 API 請求；另外以會拋錯的 fetch／storage 驗證試玩完全不依賴它們，新頁面不會恢復試玩狀態。
+- 瀏覽器工具驗收缺口沿用先前紀錄；未 Push、未部署、未刪除舊資料。
+
+## Codex 落石提示、頁內切換與 P2 分析（2026-11-14，最新）
+
+- 使用者要求落石先有標示再移除道路，並能在同頁切換查看紀錄及 Prob.pdf 模型。共用 engine.js 與 backend/ 均未修改，沒有改動任何規則。
+- 新增 effects.js，依已確認的安全 effects 順序重建公開棋盤的呈現：place→rock 警示 850ms→移除 250ms，再處理下一張落石。空場落石也有文字警示。期間 busy 停用操作，倒數持續；最後 GET current 校正至最新權威狀態。重試同 actionId 不重播已完成動畫；未在後端延後拆牌。trial.js 僅補出對應的安全 effect 欄位，沒有新增上傳或持久化。
+- index.html／workspace.js 增加遊戲、紀錄與統計、模型分析三個視圖。以 hidden 切換，不銷毀遊戲 DOM；登入後台以同源 iframe 延遲載入並保留，切回遊戲不丟失試玩狀態。全體資料仍由既有組員 API 驗證；未登入無法取得全體資料。新模型頁不讀取全體遊戲資料。
+- PDF 為 12 頁影像型文件；已逐頁渲染檢視。分析來源為使用者本機 Downloads/Prob.pdf 第 5–12 頁：固定中→左→右、距離 ±1、H=5／D=17／B=4、條件機率與四點 PMF／右連續 CDF、moments、事件機率、B=5／十字優先／H=4 比較、負超幾何／超幾何分布、設計建議與記錄規劃。
+- 頁面清楚標記是文件列值，不是重算完整遞迴或真人實測。PMF／CDF 與抽樣分布有本地互動；moments 由四位小數 PMF 重新計算並說明四捨五入差異。B=5 的文件 PMF 和為 1.0001，照列並警示，不偷偷正規化。附件第 12 頁模擬是文件報告，未重新跑 200,000 局。
+- 組員 stats 增加實測完成局次比例與 PDF 基準的描述性並列，明示分母、提前結束是否含入，以及自由鋪路與固定策略假設不同，不作同分布檢定。
+- 待 Claude Code／後續分析協作：文件想驗證「第幾段失敗」「十字在哪一段打出」。目前自由鋪路沒有固定段落標記，不能直接宣稱現有 events 已支持這些比較；若需要，先定義段落與策略／參數版本欄位，並提供受授權資料或離線分析流程。沒有本次擅自改後端。
+- PDF 解析／渲染所需工具暫放被忽略的 work/pdf-tools；沒有改動專案 package.json 或加入執行期相依。未複製學生姓名等非必要個資到頁面，未將原始 PDF 公開提供。
+- 前端規則／API／動畫／模型數學與頁內切換測試通過，後端 24/24、建置成功。瀏覽器工具仍回空 apps／browsers，真實動畫時序、手機版面、登入 iframe 與下載仍待瀏覽器驗收。未 Push、未部署。

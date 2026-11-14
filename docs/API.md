@@ -1,6 +1,6 @@
-# 前後端介面提案 v0.1（待 Claude Code 確認）
+# 前後端介面（v0.1 提案與 v0.2 定案）
 
-目前沒有可呼叫的後端，前端是本機原型；此文件供 Claude Code 實作及雙方整合。JSON 駝峰命名，時間 ISO UTC，持續時間為毫秒，列欄使用 0-based。
+下方 v0.1 保留提案背景；目前已有後端及 API 前端，衝突處以「契約定案 v0.2」為準。Codex review 與待修事項見 HANDOFF.md 最新段落。JSON 駝峰命名，持續時間為毫秒，列欄使用 0-based。**時間定案：`startedAt`、`endedAt`、`deadlineAt`、`serverNow` 與 CSV 對應的時間點為 Unix epoch 毫秒（`Date.now()` 數值），不是 ISO 字串；`durationMs`、`elapsedMs`、`decisionMs` 為持續時間毫秒，不是 epoch 時間點。** v0.1 原提案的「ISO UTC」已不適用，以此為準。
 
 ## 分工與信任邊界
 
@@ -116,10 +116,12 @@
 
   ```
   POST /api/games/:id/lifecycle
-  { "type": "hidden" | "visible" | "restored" }
+  { "type": "hidden" | "visible" | "restored", "eventId"?: string }
   ```
 
-  行為：先跑逾時判定，再呼叫對應的生命週期記錄；回應格式與 actions 相同（`{ game, effects }`）。不計入 `actionId` 去重（沒有狀態轉移風險，重送無害）。
+  行為：先跑逾時判定，再呼叫對應的生命週期記錄；回應格式與 actions 相同（`{ game, effects }`）。**這個呼叫也會讓 `revision` 遞增**（寫入了新事件），呼叫方請以回應內的 `revision` 為準，不要假設只有 actions 才會改變它。
+
+  **v0.2.1 修正**：先前這裡寫「重送無害」不準確——重送若沒有去重，會在 events 表留下重複的 `hidden`/`visible`/`restored` 紀錄，影響分析（Codex review 的契約意見）。現在 `eventId`（客戶端產生的字串）是**可選**欄位：帶了就依 actionId 的方式去重（同 `eventId` 同內容重放同一回應；同 `eventId` 不同內容回 `409 IDEMPOTENCY_KEY_REUSE`）；省略則維持舊行為（不去重，相容尚未更新的呼叫方）。建議 Codex 之後的呼叫一律帶上 `eventId`。
 
 ### 組員功能（回覆「組員功能」待確認項）
 
@@ -154,7 +156,7 @@ gameId、playerId、attempt、version、完整 config、source、mode、startedA
 
 Events：
 
-gameId、seq（局內唯一遞增）、turn、type、elapsedMs、decisionMs（place/discard）、cardId、row/col、移除位置、翻牌結果、手牌數／牌庫數。事件與最終結果應同一交易儲存。
+gameId、seq（局內唯一遞增）、turn、type、elapsedMs、decisionMs（place/discard）、cardId、row/col、移除位置、翻牌結果、手牌數／牌庫數。事件、最終結果與對應的冪等重放紀錄（`Idempotency-Key`／`actionId`／`eventId`）須在同一交易內寫入；v0.2 實作曾經分開寫入（Codex review P2），已修正為共用交易。
 
 時間定義：
 

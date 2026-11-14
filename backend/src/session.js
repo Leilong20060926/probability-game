@@ -8,7 +8,11 @@ const ADMIN_CSRF_COOKIE = 'mine_admin_csrf';
 const PLAYER_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 const ADMIN_TTL_MS = 8 * 60 * 60 * 1000;
 
-const secure = process.env.COOKIE_SECURE === 'true';
+// 讀取時機要晚於 server.js 的 process.loadEnvFile()，不能在模組載入時就
+// 算成常數——否則 .env 的 COOKIE_SECURE 永遠不會生效（這是 Codex review 抓到的 P1）。
+function isSecure() {
+  return process.env.COOKIE_SECURE === 'true';
+}
 
 export function parseCookies(req) {
   const header = req.headers.cookie || '';
@@ -29,7 +33,7 @@ function cookieString(name, value, { httpOnly = true, sameSite = 'Lax', maxAgeMs
   const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/'];
   if (httpOnly) parts.push('HttpOnly');
   parts.push(`SameSite=${sameSite}`);
-  if (secure) parts.push('Secure');
+  if (isSecure()) parts.push('Secure');
   if (maxAgeMs != null) parts.push(`Max-Age=${Math.floor(maxAgeMs / 1000)}`);
   return parts.join('; ');
 }

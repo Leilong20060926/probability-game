@@ -1,39 +1,137 @@
-import {
-  VERSION,
-  card,
-  newGame,
-  canPlace,
-  act,
-  checkTimeout,
-  abandon,
-  recordLifecycle,
-} from './engine.js';
-
-import {
-  read,
-  write,
-  saveGame,
-  storageAvailable,
-} from './storage.js';
+import { VERSION, card, canPlace } from './engine.js';
+import { api as serverApi, createGameRequest, actionRequest, lifecycleRequest, millis, publicBoard, escapeHtml } from './storage.js';
+import {createTrial} from './trial.js';
+import {playRockEffects} from './effects.js';
 
 const app = document.querySelector('#app');
-
-let player = read('player', null) || {
-  id: crypto.randomUUID(),
-  attempt: 0,
-};
-
-write('player', player);
-
-let game = read('active', null);
-
-if (game && game.playerId !== player.id) {
-  game = null;
-}
-
+let player = { id: '', nextAttempt: 1 };
+let game = null;
 let selected = null;
 let notice = '';
 let help = false;
+let busy = false;
+let pending = null;
+let connected = false;
+let serverTime = 0;
+let receivedAt = 0;
+let lifecycleQueue = [];
+let restoredRequest = null;
+let mode = null;
+let trial = null;
+let presentation = null;
+
+function api(path, options) {
+  if (mode === 'trial') return trial(path, options);
+  if (mode === 'server') return serverApi(path, options);
+  throw new Error('請先選擇是否記錄資料。');
+}
+
+function chooseMode(next) {
+  if (busy || pending || game?.status === 'playing') return;
+  mode = next;
+  trial = next === 'trial' ? createTrial() : null;
+  run(initialize);
+}
+
+function changeMode() {
+  if (busy || pending || game?.status === 'playing') return;
+  mode = null; trial = null; game = null; selected = null;
+  player = {id:'',nextAttempt:1}; connected = false;
+  lifecycleQueue = []; restoredRequest = null; notice = ''; help = false;
+  render();
+}
+
+const modeLabel = () => mode === 'trial' ? '不記錄試玩' : mode === 'server' ? '記錄資料' : '尚未選擇紀錄模式';
+
+function accept(view) {
+  game = view;
+  if (view) {
+    player.id = view.playerId;
+    player.nextAttempt = view.attempt + 1;
+    serverTime = millis(view.serverNow);
+    receivedAt = performance.now();
+  }
+  selected = null;
+}
+
+async function current() {
+  accept(await api('/api/games/current'));
+}
+
+async function run(operation) {
+  if (busy) return;
+  busy = true;
+  pending = operation;
+  notice = mode === 'trial' ? '正在準備試玩…' : '正在與伺服器同步，請稍候…';
+  render();
+  try {
+    await operation();
+    pending = null;
+    connected = true;
+  } catch (error) {
+    selected = null;
+    if (error.code === 'REVISION_CONFLICT' || error.code === 'GAME_IN_PROGRESS') {
+      try {
+        // Fetch fresh server time and revision, even when the error attaches a view.
+        await current();
+        connected = true;
+        pending = null;
+        notice = error.code === 'REVISION_CONFLICT'
+          ? '其他操作已更新本局，已同步最新狀態，請重新選牌。'
+          : '已有進行中的探勘，已恢復原局。';
+      } catch {
+        connected = false;
+        pending = current;
+        notice = '無法同步最新狀態，請重試連線。';
+      }
+    } else if (error.status && error.status < 500) {
+      pending = current;
+      connected = false;
+      notice = error.status === 401
+        ? '玩家憑證已失效，請重新整理以建立連線。'
+        : error.message + '，請同步後重新選擇。';
+    } else {
+      connected = false;
+      notice = '連線失敗，操作結果尚未確認。請按重試，勿關閉頁面。';
+    }
+  } finally {
+    busy = false;
+    render();
+    if (connected && !pending && lifecycleQueue.length) {
+      deliverLifecycle(lifecycleQueue.shift());
+    }
+  }
+}
+
+async function initialize() {
+  const info = await api('/api/players', { body: {} });
+  player = { id: info.playerId, nextAttempt: info.nextAttempt };
+  await current();
+  if (game?.status === 'playing') {
+    const path = '/api/games/' + encodeURIComponent(game.id) + '/lifecycle';
+    if (restoredRequest?.path !== path) restoredRequest = lifecycleRequest(game, 'restored');
+    await api(restoredRequest.path, restoredRequest.options);
+    await current();
+    restoredRequest = null;
+  }
+  notice = mode === 'trial' ? '不記錄試玩：資料只在本頁記憶體，重整或關閉即消失。'
+    : game ? '已從伺服器恢復本局，資料會繼續記錄。' : '已開啟資料紀錄，按開始探勘。';
+}
+
+function sendLifecycle(type) {
+  if (game?.status !== 'playing') return;
+  deliverLifecycle(lifecycleRequest(game, type));
+}
+
+function deliverLifecycle(request) {
+  if (busy || pending) { lifecycleQueue.push(request); return; }
+  if (game?.status !== 'playing' || request.path !== '/api/games/' + encodeURIComponent(game.id) + '/lifecycle') return;
+  run(async () => {
+    await api(request.path, request.options);
+    await current();
+    notice = mode === 'trial' ? '已回到不記錄試玩，本局不儲存。' : '已同步伺服器狀態。';
+  });
+}
 
 const reasons = {
   gold: '成功找到金礦',
@@ -69,17 +167,11 @@ function road(id, label = true) {
 }
 
 const remaining = () => game
-  ? Math.max(
-      0,
-      Math.ceil(
-        (
-          game.startedAt +
-          300000 -
-          (game.endedAt ?? Date.now())
-        ) / 1000,
-      ),
-    )
+  ? Math.max(0, Math.ceil((millis(game.deadlineAt) -
+      (game.endedAt == null ? serverTime + performance.now() - receivedAt : millis(game.endedAt))) / 1000))
   : 300;
+
+const playable = () => connected && !busy && !pending && (game?.status !== 'playing' || remaining() > 0);
 
 const time = seconds => (
   `${Math.floor(seconds / 60).toString().padStart(2, '0')}:` +
@@ -87,21 +179,13 @@ const time = seconds => (
 );
 
 function start() {
-  if (game?.status === 'playing') return;
-
-  player.attempt++;
-  write('player', player);
-
-  game = newGame(player.id, player.attempt);
-  selected = null;
-  notice = '選一張手牌，亮起的格子就是可以鋪路的位置。';
-
-  game.deviceType = matchMedia('(pointer: coarse)').matches
-    ? 'touch'
-    : 'pointer';
-
-  saveGame(game);
-  render();
+  if (!playable() || game?.status === 'playing') return;
+  const request = createGameRequest(matchMedia('(pointer: coarse)').matches ? 'touch' : 'pointer');
+  run(async () => {
+    await api(request.path, request.options);
+    await current(); // Cached idempotent responses may contain an old serverNow/revision.
+    notice = '選一張手牌，亮起的格子就是可以鋪路的位置。';
+  });
 }
 
 function board() {
@@ -109,21 +193,23 @@ function board() {
 
   for (let r = 0; r < 5; r++) {
     for (let c = 0; c < 6; c++) {
-      const id = game?.board[`${r},${c}`];
+      const id = presentation ? presentation.board[`${r},${c}`] : game && publicBoard(game)[`${r},${c}`];
+      const rockHit = presentation?.phase === 'warning' && presentation.rock === `${r},${c}`;
       const startCell = r === 2 && c === 0;
       const target = c === 5 && [0, 2, 4].includes(r);
-      const revealed = game?.revealed.includes(r);
+      const endpoint = game?.targets.find(t => t.row === r);
+      const revealed = target && endpoint?.revealed;
 
       const legal = selected !== null &&
-        game &&
-        canPlace(game, game.hand[selected], r, c);
+        game && playable() &&
+        canPlace({status: game.status, board: publicBoard(game)}, game.hand[selected], r, c);
 
       const name = startCell
         ? '起點'
         : target
           ? (
               revealed
-                ? (r === game.goldRow ? '金礦' : '金幣')
+                ? (endpoint.reward === 'gold' ? '金礦' : '金幣')
                 : '未知終點'
             )
           : id
@@ -137,9 +223,9 @@ function board() {
             ${target ? 'target' : ''}
             ${revealed ? 'revealed' : ''}
             ${legal ? 'legal' : ''}
-            ${id ? 'occupied' : ''}"
+            ${id ? 'occupied' : ''} ${rockHit ? 'rock-hit' : ''}"
           data-cell="${r},${c}"
-          aria-label="第 ${r + 1} 列第 ${c + 1} 欄：${name}${legal ? '，可放置' : ''}"
+          aria-label="第 ${r + 1} 列第 ${c + 1} 欄：${name}${rockHit ? '，落石即將拆除道路' : ''}${legal ? '，可放置' : ''}"
           ${!legal ? 'disabled' : ''}
         >
           ${
@@ -148,10 +234,10 @@ function board() {
               : target
                 ? `
                   <span class="target-symbol">
-                    ${revealed ? (r === game.goldRow ? '◆' : '●') : '?'}
+                    ${revealed ? (endpoint.reward === 'gold' ? '◆' : '●') : '?'}
                   </span>
                   <small>
-                    ${revealed ? (r === game.goldRow ? '金礦' : '金幣') : '未知礦藏'}
+                    ${revealed ? (endpoint.reward === 'gold' ? '金礦' : '金幣') : '未知礦藏'}
                   </small>
                 `
                 : id
@@ -203,9 +289,9 @@ function render() {
 
         <div class="player-chip">
           <span class="status-dot"></span>
-          探勘員 ${player.id.slice(0, 6).toUpperCase()}
+          探勘員 ${escapeHtml(player.id.slice(0, 6).toUpperCase() || '連線中')}
           <small>
-            第 ${game?.attempt || player.attempt + 1} 次探勘
+            第 ${game?.attempt || player.nextAttempt} 次探勘
           </small>
         </div>
       </div>
@@ -272,7 +358,7 @@ function render() {
             <div>
               <span>剩餘牌庫</span>
               <strong>
-                ${game?.deck.length ?? 17}<small> 張</small>
+                ${game?.deckRemaining ?? 17}<small> 張</small>
               </strong>
             </div>
             <div>
@@ -306,6 +392,22 @@ function render() {
             </div>
           </div>
 
+          <div class="expedition-actions">
+            <section class="recording-panel ${playing ? 'recording-active' : ''}" aria-label="資料紀錄模式">
+              <h2>${modeLabel()}</h2>
+              ${mode === null ? `
+                <p>開始前，請選擇是否記錄資料。</p>
+                <div class="mode-options">
+                  <button data-action="choose-trial">不記錄試玩</button>
+                  <button data-action="choose-server">記錄資料</button>
+                </div>
+              ` : `
+                <p>${mode === 'trial' ? '本局不儲存、不上傳；重整或關閉即消失。'
+                  : '本局操作與成績會保存至後端，供組員統計與匯出。'}</p>
+                <button data-action="change-mode" ${playing || busy || pending ? 'disabled' : ''}>切換紀錄模式</button>
+                <p>開局後不能切換；不會刪除以前的紀錄。</p>
+              `}
+            </section>
           ${
             !playing
               ? `
@@ -323,14 +425,15 @@ function render() {
                 </button>
               `
           }
+          </div>
 
           <p class="save-note" role="status">
-            ${
-              storageAvailable()
-                ? '◉ 紀錄暫存於此瀏覽器 · 尚未連接雲端'
-                : '⚠ 瀏覽器無法儲存，請勿關閉頁面'
-            }
+            ${mode === 'trial' ? '◉ 不記錄試玩 · 僅本頁記憶體'
+              : mode === null ? '尚未開始記錄，請先選擇紀錄模式'
+              : busy ? '正在等待伺服器確認…' : connected && !pending ? '◉ 記錄資料 · 操作由伺服器確認' : '連線中斷或尚未完成同步'}
           </p>
+          <p class="notice" role="status">${escapeHtml(notice)}</p>
+          ${pending && !busy ? '<button data-action="retry">重試連線／同步</button>' : ''}
         </aside>
       </div>
 
@@ -398,6 +501,7 @@ function render() {
 
       <footer>
         <span>矮人礦坑 · 單人版</span>
+        <a href="/admin.html">組員登入</a>
         <span>
           18 張道路牌 / 4 張落石 / 300 秒
           <span class="version">v${VERSION}</span>
@@ -413,6 +517,9 @@ function render() {
     }
   `;
 
+  app.querySelectorAll('[data-hand], [data-cell], [data-action="start"], [data-action="end"], [data-action="discard"], [data-action="next-player"]').forEach(el => {
+    if (!playable()) el.disabled = true;
+  });
   bind();
 }
 
@@ -451,8 +558,8 @@ function helpDialog() {
         </ol>
 
         <p class="muted">
-          計時開始後，切換分頁或關閉頁面仍會計時。
-          紀錄目前僅存於此瀏覽器。
+          ${mode === 'trial' ? '計時開始後，切換分頁仍會計時；重整或關閉會丟棄試玩局。' : '記錄模式計時開始後，切換分頁或關閉頁面仍會計時。'}
+          ${mode === 'trial' ? '不記錄試玩僅在本頁運作，重整或關閉即消失。' : '記錄模式的操作與成績由伺服器確認；斷線時請重試連線。'}
         </p>
 
         <button class="primary" data-action="close-help">
@@ -469,7 +576,7 @@ function resultDialog() {
     Math.max(
       0,
       Math.round(
-        (game.endedAt - game.startedAt) / 1000,
+        (millis(game.endedAt) - millis(game.startedAt)) / 1000,
       ),
     ),
   );
@@ -514,14 +621,9 @@ function resultDialog() {
           </div>
         </div>
 
-        <p class="save-note">
-          ${
-            storageAvailable()
-              ? '本局紀錄已存於此瀏覽器，尚未上傳。'
-              : '本局無法儲存，請保留此頁面。'
-          }
-        </p>
-
+        <p class="save-note">${mode === 'trial' ? '不記錄試玩：本局未儲存、未上傳。' : '記錄資料：本局成績由伺服器結算並保存。'}未翻開的終點仍保持隱藏。</p>
+        <p role="status">${escapeHtml(notice)}</p>
+        ${pending && !busy ? '<button data-action="retry">重試連線／同步</button>' : ''}
         <button class="primary" data-action="start">
           同一位玩家，再玩一次 →
         </button>
@@ -532,36 +634,57 @@ function resultDialog() {
         >
           換下一位玩家
         </button>
+        <button class="text-button" data-action="change-mode" ${busy || pending ? 'disabled' : ''}>切換紀錄模式</button>
       </section>
     </div>
   `;
 }
 
+function submit(type, position) {
+  if (!playable() || !game || game.status !== 'playing') return;
+  const request = actionRequest(game, type, selected, position);
+  const before = game.board.map(cell=>({...cell}));
+  let replayed = false;
+  run(async () => {
+    const response = await api(request.path, request.options);
+    if (!replayed) {
+      try {
+        await playRockEffects(before,response.effects, frame => {
+          presentation = frame;
+          notice = frame.rock
+            ? frame.phase === 'warning' ? '🪨 落石！標示位置的道路即將被拆除。' : '落石已拆除標示位置的道路。'
+            : '🪨 抽到落石，場上沒有可拆道路；繼續補牌。';
+          render();
+        });
+        replayed = true;
+      } finally {presentation = null;}
+    }
+    await current();
+    const rocks = response.effects.filter(e => e.type === 'rock').length;
+    notice = rocks ? `遇到 ${rocks} 張落石，已更新礦坑。`
+      : mode === 'trial' ? '試玩操作完成，本局不記錄。' : '操作已由伺服器確認。';
+  });
+}
 function takeAction(position) {
-  if (selected === null || !game) return;
+  if (selected !== null) submit(position ? 'place' : 'discard', position);
+}
 
-  const before = game.events.length;
-
-  if (!act(game, selected, position)) {
-    saveGame(game);
-    render();
-    return;
-  }
-
-  const rocks = game.events
-    .slice(before)
-    .filter(e => e.type === 'rock')
-    .length;
-
-  notice = rocks
-    ? `落石！連續遇到 ${rocks} 張落石，已依序拆除最近鋪設的道路。`
-    : position
-      ? '道路已鋪設，選擇下一張手牌繼續探勘。'
-      : '已棄牌並補牌，繼續尋找適合的道路。';
-
-  selected = null;
-  saveGame(game);
-  render();
+function nextPlayer() {
+  if (!playable()) return;
+  const oldId = player.id;
+  let attempted = false;
+  run(async () => {
+    let info = await api('/api/players', {body:{}});
+    if (!attempted || info.playerId === oldId) {
+      attempted = true;
+      info = await api('/api/players/switch', {body:{}});
+    }
+    player = {id:info.playerId, nextAttempt:info.nextAttempt};
+    accept(null);
+    lifecycleQueue = [];
+    await current();
+    notice = '已換下一位玩家。';
+  });
 }
 
 function bind() {
@@ -588,6 +711,9 @@ function bind() {
   app.querySelectorAll('[data-action]').forEach(el => {
     el.onclick = () => {
       switch (el.dataset.action) {
+        case 'choose-trial': chooseMode('trial'); break;
+        case 'choose-server': chooseMode('server'); break;
+        case 'change-mode': changeMode(); break;
         case 'start':
           start();
           break;
@@ -612,25 +738,15 @@ function bind() {
               '確定提前結束？本局會記為中途結束，得分 0 分。',
             )
           ) {
-            abandon(game);
-            saveGame(game);
-            selected = null;
-            render();
+            submit('abandon');
           }
           break;
 
         case 'next-player':
-          player = {
-            id: crypto.randomUUID(),
-            attempt: 0,
-          };
-          write('player', player);
-
-          game = null;
-          write('active', null);
-          selected = null;
-          notice = '';
-          render();
+          nextPlayer();
+          break;
+        case 'retry':
+          if (pending) run(pending);
           break;
       }
     };
@@ -646,21 +762,7 @@ function bind() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (game?.status !== 'playing') return;
-
-  checkTimeout(game);
-
-  recordLifecycle(
-    game,
-    document.hidden ? 'hidden' : 'visible',
-  );
-
-  saveGame(game);
-
-  if (game.status === 'finished') {
-    selected = null;
-    render();
-  }
+  if (game?.status === 'playing') sendLifecycle(document.hidden ? 'hidden' : 'visible');
 });
 
 document.addEventListener('keydown', event => {
@@ -674,11 +776,13 @@ document.addEventListener('keydown', event => {
     app.querySelector('.dialog')
   ) {
     const items = [
-      ...app.querySelectorAll('.dialog button'),
+      ...app.querySelectorAll('.dialog button:not(:disabled)'),
     ];
 
     const first = items[0];
     const last = items.at(-1);
+
+    if (!first) { event.preventDefault(); return; }
 
     if (
       event.shiftKey &&
@@ -702,10 +806,8 @@ document.addEventListener('keydown', event => {
 setInterval(() => {
   if (game?.status !== 'playing') return;
 
-  if (checkTimeout(game)) {
-    saveGame(game);
-    selected = null;
-    render();
+  if (!remaining() && !busy && !pending) {
+    run(async () => { await current(); notice = mode === 'trial' ? '試玩時間結束，本局未記錄。' : '已同步伺服器結算狀態。'; });
     return;
   }
 
@@ -727,11 +829,5 @@ setInterval(() => {
     bar.style.width = `${remaining() / 3}%`;
   }
 }, 250);
-
-if (game?.status === 'playing') {
-  checkTimeout(game);
-  recordLifecycle(game, 'restored');
-  saveGame(game);
-}
 
 render();

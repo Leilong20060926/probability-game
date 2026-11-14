@@ -9,7 +9,10 @@ export class ApiError extends Error {
   }
 
   toJSON() {
-    return { error: { code: this.code, message: this.message } };
+    return {
+      error: { code: this.code, message: this.message },
+      ...this.extra,
+    };
   }
 }
 
@@ -23,8 +26,9 @@ export const errors = {
   invalidAction: (message = '無效的行動') =>
     new ApiError(422, 'INVALID_ACTION', message),
 
-  gameInProgress: (message = '已有進行中的遊戲') =>
-    new ApiError(409, 'GAME_IN_PROGRESS', message),
+  // game：目前安全 GameView，依 docs/API.md 定案，body 須附最新狀態供前端直接恢復。
+  gameInProgress: (game, message = '已有進行中的遊戲') =>
+    new ApiError(409, 'GAME_IN_PROGRESS', message, { game }),
 
   revisionConflict: (message = 'revision 與伺服器不一致') =>
     new ApiError(409, 'REVISION_CONFLICT', message),
