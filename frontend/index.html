@@ -10,15 +10,15 @@
 <body>
   <nav class="workspace-nav" aria-label="頁面切換">
     <button data-view="game" aria-pressed="true">礦坑遊戲</button>
-    <button data-view="records" aria-pressed="false">紀錄與統計（組員）</button>
+    <button data-view="records" aria-pressed="false">紀錄與統計</button>
     <button data-view="analysis" aria-pressed="false">模型與機率分析</button>
   </nav>
   <div id="app"></div>
   <section id="records-view" class="workspace-view" hidden aria-label="資料記錄情形">
     <h1>紀錄與統計</h1>
-    <p>不記錄試玩不會出現在這裡；全體資料需組員登入後查看。按「重新整理」可取得最新資料。</p>
+    <p>不記錄試玩不會出現在這裡。按「重新整理」可取得最新資料。</p>
     <p>切換本頁不會暫停正在進行的遊戲。返回「礦坑遊戲」會保留頁面中的試玩狀態。</p>
-    <iframe id="records-frame" title="組員登入與資料紀錄後台"></iframe>
+    <iframe id="records-frame" title="資料紀錄與統計"></iframe>
   </section>
   <section id="analysis-view" class="workspace-view" hidden aria-label="模型與機率分析"></section>
   <script type="module" src="/src/app.js"></script>

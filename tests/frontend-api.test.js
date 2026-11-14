@@ -2,11 +2,10 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {startTestServer} from '../backend/tests/helpers.js';
 import {api, ApiError, createGameRequest, actionRequest, lifecycleRequest, publicBoard} from '../frontend/src/storage.js';
-import {hashPassword} from '../backend/src/password.js';
 import {getGame,saveGame} from '../backend/src/games-repo.js';
 import {actionNotice} from '../frontend/src/effects.js';
 
-test('frontend transport: lost response retry, revision recovery, session isolation and authenticated CSV', async () => {
+test('frontend transport: lost response retry, revision recovery, player isolation and anonymous records/CSV', async () => {
   const server = await startTestServer();
   const originalFetch = globalThis.fetch;
   const cookies = new Map();
@@ -22,13 +21,15 @@ test('frontend transport: lost response retry, revision recovery, session isolat
     if (loseResponse) { loseResponse = false; throw new TypeError('simulated lost response'); }
     return response;
   };
-  const oldUser = process.env.ADMIN_USERNAME;
-  const oldHash = process.env.ADMIN_PASSWORD_HASH;
   try {
     for (const path of ['/', '/admin.html', '/src/app.js', '/src/admin.js', '/src/storage.js', '/src/style.css', '/src/workspace.js', '/src/analysis.js', '/src/effects.js']) {
       assert.equal((await originalFetch(server.baseUrl + path)).status, 200, path);
     }
-    await assert.rejects(api('/api/admin/stats'), error => error.status === 401);
+    assert.equal((await api('/api/admin/stats')).games,0);
+    assert.equal((await api('/api/admin/games')).total,0);
+    for (const name of ['export','events']) {
+      assert.match(await (await api(`/api/admin/${name}.csv`,{raw:true})).text(),/gameId/);
+    }
     await api('/api/players', {body:{}});
     const create = createGameRequest('pointer');
     loseResponse = true;
@@ -85,22 +86,15 @@ test('frontend transport: lost response retry, revision recovery, session isolat
     await api('/api/players/switch', {body:{}});
     assert.equal(await api('/api/games/current'), null);
     await assert.rejects(api(end.path, end.options), error => error.status === 404);
-    process.env.ADMIN_USERNAME = 'frontend-test';
-    process.env.ADMIN_PASSWORD_HASH = hashPassword('test-only-password');
-    const login = await api('/api/admin/login', {body:{username:'frontend-test',password:'test-only-password'}});
+    cookies.clear(); // No player or admin cookie for any aggregate/export read.
     assert.equal((await api('/api/admin/games')).total, 1);
     assert.equal((await api('/api/admin/stats')).finished, 1);
     for (const name of ['export','events']) {
       const blob = await api(`/api/admin/${name}.csv?mode=server`, {raw:true});
       assert.match(await blob.text(), /gameId/);
     }
-    await assert.rejects(api('/api/admin/logout', {body:{}}), error => error.status === 403);
-    await api('/api/admin/logout', {body:{},headers:{'X-CSRF-Token':login.csrfToken}});
-    await assert.rejects(api('/api/admin/games'), error => error.status === 401);
   } finally {
     globalThis.fetch = originalFetch;
-    if (oldUser === undefined) delete process.env.ADMIN_USERNAME; else process.env.ADMIN_USERNAME = oldUser;
-    if (oldHash === undefined) delete process.env.ADMIN_PASSWORD_HASH; else process.env.ADMIN_PASSWORD_HASH = oldHash;
     await server.close();
     server.db.close();
   }

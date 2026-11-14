@@ -2,22 +2,12 @@ import {api, escapeHtml as e} from './storage.js';
 import {scores,baseline} from './analysis.js';
 
 const $ = selector => document.querySelector(selector);
-let csrfToken = '';
 let page = 1;
 let total = 0;
 let applied = new URLSearchParams();
 let busy = false;
 const reason = {gold:'金礦',timeout:'超時',exhausted:'耗盡',abandoned:'提前結束'};
 if (new URLSearchParams(location.search).has('embedded')) document.querySelector('#back-player').hidden = true;
-
-function clearPrivate() {
-  $('#authorized').hidden = true;
-  $('#login').hidden = false;
-  $('#stats').replaceChildren();
-  $('#games').replaceChildren();
-  $('#page-info').textContent = '';
-  csrfToken = '';
-}
 
 async function task(operation) {
   if (busy) return;
@@ -28,9 +18,8 @@ async function task(operation) {
     await operation();
     $('#status').textContent = '已取得伺服器回應。';
   } catch (error) {
-    if (error.status === 401) clearPrivate();
-    $('#status').textContent = error.status === 401 ? '請登入有效組員帳號。' :
-      error.status === 429 ? '登入嘗試過多，請稍後再試。' :
+    $('#status').textContent = error.status === 401 || error.status === 403
+      ? '伺服器拒絕讀取資料，請確認伺服器已更新後重試。' :
       error.status ? error.message : '連線失敗，請重試；尚未確認操作結果。';
   } finally {
     busy = false;
@@ -44,6 +33,8 @@ async function load() {
   // Clear old results before loading so failed filters cannot show stale data.
   $('#stats').replaceChildren();
   $('#games').replaceChildren();
+  $('#page-info').textContent = '';
+  total = 0;
   const query = new URLSearchParams(applied);
   query.set('page', page);
   query.set('pageSize', 50);
@@ -64,28 +55,7 @@ async function load() {
     reason[g.reason] || '—',g.score,g.turns,g.durationMs == null ? '—' : (g.durationMs / 1000).toFixed(1),
   ].map(v => `<td>${e(v)}</td>`).join('')}</tr>`).join('');
   $('#page-info').textContent = `第 ${games.page} 頁，共 ${total} 局（每頁 50 局）`;
-  $('#login').hidden = true;
-  $('#authorized').hidden = false;
 }
-
-$('#login').onsubmit = event => {
-  event.preventDefault();
-  const form = new FormData(event.currentTarget);
-  const body = {username:form.get('username'),password:form.get('password')};
-  task(async () => {
-    try {
-      const response = await api('/api/admin/login', {body});
-      csrfToken = response.csrfToken;
-      page = 1;
-      await load();
-    } finally { $('#login').elements.password.value = ''; }
-  });
-};
-$('#logout').onclick = () => task(async () => {
-  const cookieToken = document.cookie.split('; ').find(c => c.startsWith('mine_admin_csrf='))?.split('=')[1];
-  await api('/api/admin/logout', {body:{}, headers:{'X-CSRF-Token':csrfToken || decodeURIComponent(cookieToken || '')}});
-  clearPrivate();
-});
 $('#filters').onsubmit = event => {
   event.preventDefault();
   applied = new URLSearchParams([...new FormData(event.currentTarget)].filter(([,v]) => v));
@@ -106,5 +76,5 @@ document.querySelectorAll('[data-export]').forEach(button => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 });
-// Restoration still requires a real server session; no frontend authorization flag.
+// Records are public by explicit user decision; no login or session bootstrap.
 task(load);

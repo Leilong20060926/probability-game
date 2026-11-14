@@ -1,5 +1,14 @@
 # 前端驗證
 
+## 公開紀錄頁（2026-11-14，最新）
+
+- 依使用者最新授權移除紀錄頁登入表單、登出及前端 credential／CSRF 流程；不更改後端已完成的公開端點。
+- frontend-api：無 cookie 時四個紀錄端點可讀；遊戲結束後清空 cookie，仍可查詢 games/stats 與下載兩種 CSV。玩家操作仍驗證 session 隔離。
+- admin-ui：模擬 DOM 驗證直接載入、篩選、分頁、下載、失敗後重試，沒有任何 login/logout 呼叫。不是實際瀏覽器／檔案開檔測試。
+- 前端 22/22、後端 29/29、靜態 build 與 JS 語法檢查通過。現有目錄無 cloud 測試，本次不重建或執行雲端測試；未 Push／部署。
+
+下方「登入保護」為舊設計歷史，現行公開讀取契約以 API.md 與 HANDOFF.md 的使用者決定為準。
+
 ## 手機區網 HTTP 相容（2026-11-14，最新）
 
 - frontend/src/uuid.js 在沒有 randomUUID 時改用 getRandomValues 產生 UUID v4；共用 engine 的唯一修改為 UUID helper，不變更遊戲規則與 0.2.0 版本。

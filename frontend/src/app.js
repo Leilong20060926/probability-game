@@ -403,7 +403,7 @@ function render() {
                 </div>
               ` : `
                 <p>${mode === 'trial' ? '本局不儲存、不上傳；重整或關閉即消失。'
-                  : '本局操作與成績會保存至後端，供組員統計與匯出。'}</p>
+                  : '本局操作與成績會保存至後端，供統計與匯出。'}</p>
                 <button data-action="change-mode" ${playing || busy || pending ? 'disabled' : ''}>切換紀錄模式</button>
                 <p>開局後不能切換；不會刪除以前的紀錄。</p>
               `}
@@ -501,7 +501,7 @@ function render() {
 
       <footer>
         <span>矮人礦坑 · 單人版</span>
-        <a href="/admin.html">組員登入</a>
+        <a href="/admin.html">紀錄與統計</a>
         <span>
           18 張道路牌 / 4 張落石 / 300 秒
           <span class="version">v${VERSION}</span>

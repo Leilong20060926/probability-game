@@ -8,7 +8,7 @@
 - 正式遊戲不可把未抽牌庫與金礦位置回傳給瀏覽器。不得接受客戶端聲稱的 score 或 goldRow 作為可信結果。
 - local 模式紀錄不可偽裝 server 模式真人紀錄；若提供匯入，標記 `unverified_local`。
 - 同一匿名玩家的能力憑證應由後端設定 HttpOnly、SameSite cookie（正式環境 Secure）。UUID 只是識別碼，不是授權。
-- 管理 API 必須驗證組員 session；公開前端不得內嵌管理密碼或全體資料。CSV、統計同樣受保護。
+- ~~管理 API 必須驗證組員 session~~（2026-11-14 使用者決定移除）：`GET /api/admin/games`、`/stats`、`/export.csv`、`/events.csv` 現在不需要登入即可讀取，任何知道網址的人都能看到全體玩家資料並下載 CSV。`POST /api/admin/login`/`logout` 端點仍保留（相容既有前端流程），但不再是讀取資料的必要條件。這項決定覆寫了本文件與 AGENTS.md 先前的「server-side team authorization」設計，細節見 `docs/HANDOFF.md`。
 
 ## 玩家 API（建議同源 /api）
 
@@ -128,7 +128,7 @@
 - Cookie session：玩家與組員分離（`mine_player_session`、`mine_admin_session`），皆為伺服器產生的隨機 id，`HttpOnly`、`SameSite`（玩家 Lax、組員 Strict）。正式環境請設定 `COOKIE_SECURE=true`（需要 HTTPS）。
 - 組員登入：`POST /api/admin/login { username, password }`，依 IP+帳號限流（15 分鐘內 5 次錯誤即鎖定）。成功回應 `{ username, csrfToken }`，並另外發一個非 HttpOnly 的 `mine_admin_csrf` cookie（雙重送出模式）。
 - `POST /api/admin/logout` 需要在 header 帶 `X-CSRF-Token`，與 cookie 相符才會登出；不符回 `403 FORBIDDEN`。
-- `GET /api/admin/games`、`GET /api/admin/stats`、`GET /api/admin/export.csv`、`GET /api/admin/events.csv`：僅需有效組員 session（讀取不需 CSRF）；支援 `version`/`source`/`mode`/`status`/`reason` 篩選，`games` 另支援 `page`/`pageSize`（預設 50，上限 200）。
+- **2026-11-14 定案（使用者明確決定，覆寫上面的「組員 session」設計）**：`GET /api/admin/games`、`GET /api/admin/stats`、`GET /api/admin/export.csv`、`GET /api/admin/events.csv` 已移除 `requireAdmin` 檢查，**不需要登入即可讀取**，知道網址就能看到全體玩家資料與下載 CSV。登入/登出端點仍保留、仍會簽發/撤銷 `mine_admin_session`，但不再是讀取這四個端點的必要條件——保留純粹是相容既有前端呼叫，之後前端的登入畫面要不要留由 Codex 決定。各端點支援的 `version`/`source`/`mode`/`status`/`reason` 篩選與 `games` 的 `page`/`pageSize`（預設 50，上限 200）不變。
 - `stats` 空資料時 `games`/`players`/`finished` 為 0，`goldFinishRate`/`avgScore`/`avgDurationMs` 在無資料時回 `null`（SQL `AVG`/除以零皆不產生 NaN）；`games` 計局數、`players` 為 `COUNT(DISTINCT playerId)`。
 
 ### 錯誤格式

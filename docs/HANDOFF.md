@@ -248,3 +248,35 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前�
 **測試結果**：`npm run test:backend` **29/29**（含本次新增 5 個測試）、`npm test` 20/20（未動 frontend，沿用 Codex 剛跑過的結果不受影響）、`npm run build` 成功。
 
 未 Push、未部署。`backend/.env.example` 維持現狀未更動。
+
+## 使用者決定：移除「紀錄與統計」頁的登入驗證（2026-11-14）
+
+使用者明確要求「紀錄與統計那裡不需要設密碼」，並確認是**完全移除驗證**（不是換一種保護方式）：任何人只要知道網址就能看到全體玩家資料與下載 CSV。這項決定覆寫了 `AGENTS.md` 原本「Aggregate data and CSV require server-side team authorization」的設計，已同步更新 `AGENTS.md` 與 `docs/API.md`（「組員功能」段落）反映現況。
+
+**後端已改（只動 `backend/`）**：
+
+- `backend/src/routes/admin.js` 的 `GET /api/admin/games`、`/stats`、`/export.csv`、`/events.csv` 拿掉了 `requireAdmin(db, req)` 檢查，現在不需要任何 cookie/session 就能 200。
+- `POST /api/admin/login`、`POST /api/admin/logout` 兩個端點**原樣保留**（含限流、CSRF double-submit），只是不再是讀取上面四個端點的必要條件——純粹為了不強迫立刻動前端。
+- `backend/tests/auth-admin.test.js` 已更新：把「未登入應該 401」的測試改成「不登入也應該 200」；login/logout 的 CSRF 與限流測試維持不變。`npm run test:backend` 29/29 全過。
+
+**請 Codex 確認前端怎麼處理**（這塊我不動，依 AGENTS.md 分工屬於 `frontend/`）：
+
+- `frontend/admin.html`、`frontend/src/admin.js` 目前應該還有登入表單 UI。既然後端不再要求登入，這個表單變成可選——是要整個拿掉登入畫面直接顯示資料，還是先保留畫面但允許「跳過登入」，由你們決定。
+- 如果拿掉登入 UI，請確認 `frontend/tests/frontend-ui.test.js`、`frontend/tests/frontend-api.test.js`（或相近的既有測試）裡任何斷言「未登入會被擋」「需要先 POST /api/admin/login 才能看到資料」的案例都要跟著調整，否則會跟新的後端行為對不上。
+- 這是你們擁有的檔案，我不會主動改 `frontend/`，只是把後端這邊已經生效的新行為告知，確保雙方契約文件（`docs/API.md`）和實作一致。
+
+**已知：`npm test` 現在會有 1 個失敗**，是這項後端改動直接造成的，不是別的回歸：`tests/frontend-api.test.js:31` 斷言 `api('/api/admin/stats')` 未登入要回 401（`await assert.rejects(api('/api/admin/stats'), error => error.status === 401);`），但現在這個端點本來就不需要登入，會直接回 200，所以 `assert.rejects` 抓不到例外而失敗。這是你們的測試檔案，我沒有動它；麻煩依你們想要的前端處理方式（整個拿掉登入 UI，或保留但不強制）調整這一行斷言。其餘 19 個前端測試、29 個後端測試、`npm run build` 都正常。
+
+**安全性提醒（不是要你們改，只是明確寫下來避免之後誤會）**：這個 admin 頁面現在等同公開頁面，任何能連到這台伺服器（包含同一區網手機試玩情境）的人都能下載全體玩家的 CSV。這是使用者本人明確做出的決定，不是我方疏漏；但如果之後要重新收緊，隨時可以把 `requireAdmin(db, req)` 加回 `backend/src/routes/admin.js` 的那四個 handler，login/logout 的基礎設施都還在，不需要重建。
+
+未 Push、未部署。
+
+## Codex 公開紀錄頁銜接（2026-11-14）
+
+依使用者「完全移除紀錄與統計登入驗證」的明確決定與最新 AGENTS/API，前端選擇直接移除登入 UI，不保留跳過登入步驟：
+
+- admin.html 移除帳密表單與登出按鈕，資料區直接可見；admin.js 初始化只 GET stats/games，篩選、分頁與兩種 CSV 沿用既有 API。不再呼叫 login/logout、不讀 csrf cookie、不存取密碼。若連到舊版仍要求驗證的後端，顯示服務需更新的錯誤及重試入口，不重新導入登入流程。
+- 玩家頁導覽、footer、iframe 標題與模型頁一併改為「紀錄與統計」，移除「需組員登入／僅限組員」等文字。README 的啟動步驟不再要求設組員密碼。保留既有後端 login/logout 相容端點，沒有修改任何 backend 檔案。
+- frontend-api 測試移除登入前 401 與登出後不可讀資料的舊斷言；以零 cookie 驗證四個公開端點可取得空資料／CSV，並在遊戲結束後清空 cookie，再驗證全體資料與 CSV 可讀。玩家 session 與跨玩家操作隔離測試照常保留。
+- 新增 admin-ui 模擬 DOM 測試：開頁直接讀資料、篩選、分頁、兩種下載、錯誤清空舊資料與重試；斷言整段流程全為 GET，沒有 login/logout 呼叫。
+- 本輪工作目錄沒有 cloud/ 與 test:cloud script；沒有恢復已移除的雲端檔案或聲稱跑過雲端測試。前端 22/22、後端 29/29、建置通過；瀏覽器驗收限制仍保留。未 Push、未部署。

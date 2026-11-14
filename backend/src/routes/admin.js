@@ -80,7 +80,6 @@ export function registerAdminRoutes(routes, db) {
     method: 'GET',
     pattern: /^\/api\/admin\/games$/,
     handler: (req, res) => {
-      requireAdmin(db, req);
       const query = getQuery(req);
       const filters = filtersFromQuery(query);
       const page = Number(query.get('page')) || 1;
@@ -94,7 +93,6 @@ export function registerAdminRoutes(routes, db) {
     method: 'GET',
     pattern: /^\/api\/admin\/stats$/,
     handler: (req, res) => {
-      requireAdmin(db, req);
       const filters = filtersFromQuery(getQuery(req));
       sendJson(res, 200, gameStats(db, filters));
     },
@@ -104,7 +102,6 @@ export function registerAdminRoutes(routes, db) {
     method: 'GET',
     pattern: /^\/api\/admin\/export\.csv$/,
     handler: (req, res) => {
-      requireAdmin(db, req);
       const filters = filtersFromQuery(getQuery(req));
       const rows = exportGameRows(db, filters);
 
@@ -122,7 +119,6 @@ export function registerAdminRoutes(routes, db) {
     method: 'GET',
     pattern: /^\/api\/admin\/events\.csv$/,
     handler: (req, res) => {
-      requireAdmin(db, req);
       const filters = filtersFromQuery(getQuery(req));
       const rows = exportEventRows(db, filters);
 
