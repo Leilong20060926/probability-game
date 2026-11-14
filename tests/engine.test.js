@@ -279,6 +279,31 @@ test(
 );
 
 test(
+  'abandon respects deadline and cannot overwrite or duplicate a final result',
+  () => {
+    for (const now of [300999, 301000, 301001]) {
+      const g = fresh();
+      const before = structuredClone(g);
+
+      abandon(g, now);
+
+      assert.equal(g.reason, now < 301000 ? 'abandoned' : 'timeout');
+      assert.equal(g.endedAt, Math.min(now, 301000));
+      assert.equal(g.score, 0);
+      assert.equal(g.turn, before.turn);
+      assert.deepEqual(g.hand, before.hand);
+      assert.deepEqual(g.deck, before.deck);
+      assert.equal(g.events.filter(e => e.type === 'end').length, 1);
+
+      const finished = structuredClone(g);
+      abandon(g, 401000);
+      checkTimeout(g, 401000);
+      assert.deepEqual(g, finished);
+    }
+  },
+);
+
+test(
   'lifecycle events preserve decision clock and abandoned sessions cannot act',
   () => {
     const g = fresh();

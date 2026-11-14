@@ -195,6 +195,8 @@ export function checkTimeout(game, now = Date.now()) {
 }
 
 export function abandon(game, now = Date.now()) {
+  if (checkTimeout(game, now)) return;
+
   if (game.status === 'playing') {
     finish(game, 'abandoned', now);
   }
