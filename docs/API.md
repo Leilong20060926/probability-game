@@ -1,0 +1,104 @@
+# 前後端介面提案 v0.1（待 Claude Code 確認）
+
+目前沒有可呼叫的後端，前端是本機原型；此文件供 Claude Code 實作及雙方整合。JSON 駝峰命名，時間 ISO UTC，持續時間為毫秒，列欄使用 0-based。
+
+## 分工與信任邊界
+
+- 後端擁有真正遊戲狀態、洗牌、金礦位置、計時與計分。前端 engine 是離線試玩與對照測試的實作。
+- 正式遊戲不可把未抽牌庫與金礦位置回傳給瀏覽器。不得接受客戶端聲稱的 score 或 goldRow 作為可信結果。
+- local 模式紀錄不可偽裝 server 模式真人紀錄；若提供匯入，標記 `unverified_local`。
+- 同一匿名玩家的能力憑證應由後端設定 HttpOnly、SameSite cookie（正式環境 Secure）。UUID 只是識別碼，不是授權。
+- 管理 API 必須驗證組員 session；公開前端不得內嵌管理密碼或全體資料。CSV、統計同樣受保護。
+
+## 玩家 API（建議同源 /api）
+
+### POST /api/players
+
+建立匿名玩家 session；已存在時可返回既有玩家。
+
+回應：`{ playerId, nextAttempt }`。
+
+### POST /api/players/switch
+
+明確更換共用設備玩家、換發 cookie，回應同上。不得因此讓新玩家取得上一位的私人歷史紀錄。
+
+### POST /api/games
+
+標頭 `Idempotency-Key`：客戶端 UUID。回應 201 為安全 GameView。版本與正式參數由伺服器決定；不得允許玩家調難度而未記錄。
+
+### GET /api/games/current
+
+恢復同一 session 的進行中／最近一局。回傳 GameView 或 204。伺服器按時間結算逾時，不能依賴客戶端送出 end。
+
+### POST /api/games/:id/actions
+
+內容：
+
+`{ actionId, expectedRevision, type: "place"|"discard"|"abandon", handIndex?, row?, col? }`
+
+伺服器原子驗證及處理：出牌→揭終點→金礦結束，否則補牌與連續落石→耗盡結算。
+
+同一 actionId 重試不得再執行；不同 body 重用 key 應拒絕。expectedRevision 衝突回 409 與最新安全狀態，避免多分頁重複出牌。無效行動不消耗卡牌。
+
+錯誤格式：`{ error: { code, message } }`，不帶內部資料。
+
+回應：`{ game: GameView, effects: [{ type, ...safeFields }] }`。
+
+### GameView
+
+以下是結構示意，不是可直接解析的 JSON：
+
+```text
+{
+  id, playerId, attempt, version, revision,
+  mode: "server", source: "human",
+  config: {
+    rows: 5,
+    cols: 6,
+    handSize: 5,
+    seconds: 300,
+    rocks: 4
+  },
+  status: "playing"|"finished",
+  startedAt, deadlineAt, serverNow, endedAt,
+  hand: ["horizontal", ...],
+  deckRemaining: 17,
+  board: [{ row, col, cardId }],
+  targets: [
+    { row, revealed: false }
+    |
+    { row, revealed: true, reward: "coin"|"gold" }
+  ],
+  coins, turn, score,
+  reason: null|"gold"|"timeout"|"exhausted"|"abandoned"
+}
+```
+
+前端需以 serverNow 校正倒數，斷線時暫停送出行動並提示，不能悄悄切到另一局本機遊戲。
+
+## 組員 API
+
+- POST /api/admin/login：限速、伺服器驗證、設定組員 session；選 cookie 時加入 CSRF 防護。
+- POST /api/admin/logout：撤銷 session。
+- GET /api/admin/games：分頁與 version/source/mode/status 篩選。
+- GET /api/admin/stats：同篩選，回傳樣本數、結束原因、通關率、得分計數、時間統計；空資料不得產生 NaN。分清局數與不重複玩家數。
+- GET /api/admin/export.csv：同篩選，UTF-8，必要時 BOM；正確跳脫並避免試算表公式注入。
+- GET /api/admin/events.csv：逐事件匯出，使用 gameId 關聯每局。
+
+## 資料欄位
+
+Games：
+
+gameId、playerId、attempt、version、完整 config、source、mode、startedAt、endedAt、status、reason、durationMs、turns、score、coins、goldRow（僅後台）、裝置類別、是否中斷／恢復。
+
+Events：
+
+gameId、seq（局內唯一遞增）、turn、type、elapsedMs、decisionMs（place/discard）、cardId、row/col、移除位置、翻牌結果、手牌數／牌庫數。事件與最終結果應同一交易儲存。
+
+時間定義：
+
+整局從按開始到結束；每回合從開始或上一合法行動完成，到本次合法 place/discard。包含思考及背景時間，不稱「純思考時間」。另記分頁隱藏／恢復事件以便分析排除。
+
+持久化：
+
+資料庫請使用持久磁碟或雲端服務，加入遷移與備份說明。需要驗證重啟仍在、兩裝置集中、重試不重複、匯出開檔核對。後端框架與資料庫由 Claude Code 提案。

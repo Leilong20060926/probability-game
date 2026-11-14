@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 網頁開發套件
+node_modules/
+
+# macOS 系統檔案
+.DS_Store
+
+# 暫存工作檔案
+work/
+
+# 環境設定與密碼
+.env.*
+!.env.example
