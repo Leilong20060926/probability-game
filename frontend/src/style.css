@@ -1180,3 +1180,31 @@ body { background: var(--page-bg); }
 /* 「先看一下地圖」「查看本局成績」 */
 .view-map { border-color: var(--cream-muted); color: var(--cream); }
 .view-map:hover { background: var(--game-bg-2); }
+
+/* 抽到破壞牌（落石）提示視窗：淺紅底深紅字，約 1 秒後自動消失 */
+.rock-alert {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  padding: 22px 40px;
+  border: 2px solid #b3261e;
+  border-radius: 14px;
+  background: #fde2e1;
+  color: #8b1a14;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  white-space: nowrap;
+  box-shadow: 0 12px 40px #0006;
+  pointer-events: none;
+  animation: rock-alert-pop .18s ease-out;
+}
+@keyframes rock-alert-pop {
+  from { transform: translate(-50%, -50%) scale(.85); opacity: 0; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rock-alert { animation: none; }
+}

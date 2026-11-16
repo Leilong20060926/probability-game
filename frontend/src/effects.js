@@ -11,12 +11,16 @@ export function actionNotice(effects, trial = false) {
   return messages.join(' ') || (trial ? '試玩操作完成，本局不記錄。' : '操作已由伺服器確認。');
 }
 
+export const ROCK_ALERT_MS = 1000;
+
 export function rockFrames(before, effects) {
   const board = Object.fromEntries(before.map(cell => [`${cell.row},${cell.col}`,cell.cardId]));
   const frames = [];
   for (const effect of effects) {
     if (effect.type === 'place' && effect.position) board[effect.position.join(',')] = effect.cardId;
     if (effect.type !== 'rock') continue;
+    // 先跳「抽到破壞牌」視窗約 1 秒，再標示並拆除道路。
+    frames.push({board:{...board},rock:effect.removed ?? null,phase:'alert'});
     frames.push({board:{...board},rock:effect.removed ?? null,phase:'warning'});
     if (effect.removed) delete board[effect.removed];
     frames.push({board:{...board},rock:effect.removed ?? null,phase:'removed'});
@@ -27,6 +31,6 @@ export function rockFrames(before, effects) {
 export async function playRockEffects(before, effects, show, wait = ms => new Promise(resolve=>setTimeout(resolve,ms))) {
   for (const frame of rockFrames(before,effects)) {
     show(frame);
-    await wait(frame.phase === 'warning' ? 850 : 250);
+    await wait(frame.phase === 'alert' ? ROCK_ALERT_MS : frame.phase === 'warning' ? 850 : 250);
   }
 }

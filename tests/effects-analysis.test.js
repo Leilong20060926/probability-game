@@ -9,17 +9,20 @@ test('confirmed rock sequence shows newly placed road before removing it, then p
   const effects=[{type:'place',position:[2,2],cardId:'horizontal'},
     {type:'rock',removed:'2,2'},{type:'rock',removed:'2,1'},{type:'rock',removed:null}];
   const frames=rockFrames(before,effects);
+  assert.deepEqual(frames.map(frame=>frame.phase),['alert','warning','removed','alert','warning','removed','alert','warning','removed']);
   assert.equal(frames[0].board['2,2'],'horizontal');
   assert.equal(frames[0].rock,'2,2');
-  assert.ok(!('2,2' in frames[1].board));
-  assert.equal(frames[2].board['2,1'],'horizontal');
-  assert.deepEqual(frames[3].board,{});
-  assert.equal(frames[4].rock,null);
+  assert.equal(frames[1].board['2,2'],'horizontal');
+  assert.equal(frames[1].rock,'2,2');
+  assert.ok(!('2,2' in frames[2].board));
+  assert.equal(frames[4].board['2,1'],'horizontal');
+  assert.deepEqual(frames[5].board,{});
+  assert.equal(frames[6].rock,null);
   const observed=[];
   const waits=[];
   await playRockEffects(before,effects,frame=>observed.push(frame),async ms=>{waits.push(ms);});
   assert.deepEqual(observed,frames);
-  assert.deepEqual(waits,[850,250,850,250,850,250]);
+  assert.deepEqual(waits,[1000,850,250,1000,850,250,1000,850,250]);
   assert.deepEqual(before,[{row:2,col:1,cardId:'horizontal'}]);
   assert.deepEqual(rockFrames(before,[{type:'draw'}]),[]);
 });
@@ -58,7 +61,7 @@ test('reconnecting multiple coin targets then consecutive rocks revokes only thi
     assert.equal(game.reason,'exhausted');
     assert.equal(game.events.at(-1).type,'end');
     const frames=rockFrames([],game.events);
-    assert.equal(frames.length,4, 'unreveal does not disrupt the two rock animations');
+    assert.equal(frames.length,6, 'unreveal does not disrupt the two rock animations (alert + warning + removed each)');
     const message=actionNotice(game.events);
     assert.match(message,/2 張落石/);
     assert.match(message,/第 3 列終點恢復未翻開|第 3 列終點、第 5 列終點恢復未翻開/);

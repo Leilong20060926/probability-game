@@ -505,6 +505,7 @@ function render() {
     </main>
 
     ${help ? helpDialog() : ''}
+    ${presentation?.phase === 'alert' ? '<div class="rock-alert" role="alert">💥 抽到破壞牌</div>' : ''}
     ${
       game?.status === 'finished' && !help && !resultHidden
         ? resultDialog()
@@ -652,7 +653,9 @@ function submit(type, position) {
       try {
         await playRockEffects(before,response.effects, frame => {
           presentation = frame;
-          notice = frame.rock
+          notice = frame.phase === 'alert'
+            ? '💥 抽到破壞牌！'
+            : frame.rock
             ? frame.phase === 'warning' ? '🪨 落石！標示位置的道路即將被拆除。' : '落石已拆除標示位置的道路。'
             : '🪨 抽到落石，場上沒有可拆道路；繼續補牌。';
           render();

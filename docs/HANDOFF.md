@@ -322,3 +322,13 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前�
 ## 配色主題：淺灰背景、深灰遊戲區、米白字（2026-11-16）
 
 - 使用者要求把背景改成淺灰色、遊戲區域改成深灰色、字體改成米白色。只改 frontend/src/style.css，沒有改任何 JS、HTML、規則或後端。
+## 抽到破壞牌提示視窗（2026-11-16）
+
+使用者要求：抽到破壞牌（落石）時，跳出「抽到破壞牌」視窗，淺紅底深紅字，約 1 秒後照原流程繼續。只改前端呈現，規則、`engine.js`、後端與 API 都沒動。
+
+- `frontend/src/effects.js`：`rockFrames()` 在每張落石的 `warning` 前多一個 `phase: 'alert'` 畫格；`playRockEffects()` 對 `alert` 等 `ROCK_ALERT_MS`（1000 ms），之後照舊 `warning` 850 ms、`removed` 250 ms。連續多張落石會各跳一次。
+- `frontend/src/app.js`：`presentation.phase === 'alert'` 時在畫面中央顯示 `<div class="rock-alert" role="alert">💥 抽到破壞牌</div>`，側欄提示同步顯示「💥 抽到破壞牌！」。期間與原本落石動畫一樣停用操作，遊戲倒數照常。
+- `frontend/src/style.css`：最後新增 `.rock-alert`（底色 `#fde2e1`、字色 `#8b1a14`、框線 `#b3261e`），`pointer-events: none`，減少動態偏好時不播放彈出動畫。
+- `tests/effects-analysis.test.js`：畫格順序改為 alert → warning → removed，等待時間改為 `[1000,850,250,…]`；連續落石測試的畫格數由 4 改為 6。
+
+**驗證**：前端 27/27、後端 29/29、建置成功；用瀏覽器不記錄試玩實際棄牌到抽中落石，確認視窗出現約 1 秒後消失，接著顯示原本的落石提示。
