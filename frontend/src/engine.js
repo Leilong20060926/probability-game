@@ -1,6 +1,6 @@
 import {uuid} from './uuid.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.1';
 
 export const CONFIG = Object.freeze({
   rows: 5,
@@ -81,11 +81,13 @@ export function newGame(
   };
 }
 
-// Targets accept entry only from column 5.
-// They are endpoints, not through-roads.
+export const isTarget = (r, c) => c === 5 && [0, 2, 4].includes(r);
+
+// 0.3.0：終點可從左、上、下三個方向接入（第 6 欄第 2、4 列的道路可以往上／往下
+// 接到終點）。終點仍是端點，不當作通路，路線不會穿過終點繼續延伸。
 function portsAt(game, r, c) {
   if (r === 2 && c === 0) return 'R';
-  if (c === 5 && [0, 2, 4].includes(r)) return 'L';
+  if (isTarget(r, c)) return 'LUD';
   return card(game.board[key(r, c)])?.ports;
 }
 
@@ -94,7 +96,7 @@ export function reachable(game) {
   const queue = [[2, 0]];
 
   for (const [r, c] of queue) {
-    if (c === 5) continue;
+    if (isTarget(r, c)) continue;
 
     const ports = portsAt(game, r, c) || '';
 
@@ -142,14 +144,16 @@ export function canPlace(game, id, r, c) {
 
     if (neighbor === undefined) continue;
 
+    // 終點只「接受」接入，不要求旁邊的道路一定要朝向它。
+    if (isTarget(nr, nc)) continue;
+
     if (ports.includes(dir) !== neighbor.includes(opposite)) {
       return false;
     }
 
     if (
       ports.includes(dir) &&
-      connected.has(key(nr, nc)) &&
-      nc !== 5
+      connected.has(key(nr, nc))
     ) {
       joins = true;
     }
@@ -257,26 +261,27 @@ export function act(
 
     const connected = reachable(game);
 
-    for (const r of [0, 2, 4]) {
-      if (
-        connected.has(key(r, 5)) &&
-        !game.revealed.includes(r)
-      ) {
-        game.revealed.push(r);
+    // 同一步可能同時接通多個終點：先翻金幣、最後才翻金礦，
+    // 避免金礦先結束遊戲而漏算同時接通的金幣。
+    const newlyConnected = [0, 2, 4]
+      .filter(r => connected.has(key(r, 5)) && !game.revealed.includes(r))
+      .sort((a, b) => (a === game.goldRow) - (b === game.goldRow));
 
-        record(game, 'reveal', {
-          row: r,
-          reward: r === game.goldRow ? 'gold' : 'coin',
-        }, now);
+    for (const r of newlyConnected) {
+      game.revealed.push(r);
 
-        if (r === game.goldRow) {
-          finish(game, 'gold', now);
-          return true;
-        }
+      record(game, 'reveal', {
+        row: r,
+        reward: r === game.goldRow ? 'gold' : 'coin',
+      }, now);
 
-        game.coins++;
-        revealedThisTurn.push(r);
+      if (r === game.goldRow) {
+        finish(game, 'gold', now);
+        return true;
       }
+
+      game.coins++;
+      revealedThisTurn.push(r);
     }
   }
 

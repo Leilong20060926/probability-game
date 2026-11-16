@@ -296,6 +296,16 @@ h2 span {
   margin-bottom: 3px;
 }
 
+.target-art {
+  display: block;
+  width: 62%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  margin: 0 auto 2px;
+  pointer-events: none;
+  user-select: none;
+}
+
 .cell.revealed {
   background: #c9a954;
   color: #342e17;
@@ -307,22 +317,13 @@ h2 span {
   border-color: #81917a;
 }
 
-.cell svg {
+.cell .road-art {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.tunnel-shadow {
-  stroke: #24342d;
-  stroke-width: 30;
-  fill: none;
-}
-
-.tunnel {
-  stroke: #b9b399;
-  stroke-width: 18;
-  fill: none;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
 }
 
 .cell.legal {
@@ -566,11 +567,15 @@ h2 span {
   margin-bottom: 6px;
 }
 
-.hand-card svg {
+.hand-card .road-art {
   display: block;
   width: 100%;
   aspect-ratio: 1;
+  object-fit: contain;
   border-radius: 8px;
+  background: #2b3a34;
+  pointer-events: none;
+  user-select: none;
 }
 
 .hand-card > span:not(.card-number) {
@@ -1048,7 +1053,7 @@ footer {
   #app .hand-card { padding: 6px; }
   #app .hand-card.selected { padding: 5px; }
   #app .hand-card .card-number, #app .hand-card small { display: none; }
-  #app .hand-card svg { width: 64px; max-width: 100%; height: 64px; margin: auto; }
+  #app .hand-card .road-art { width: 64px; max-width: 100%; height: 64px; margin: auto; }
   #app .hand-card > span:not(.card-number) { font-size: 11px; margin-top: 4px; line-height: 16px; }
   #app .discard-area { flex: 0 0 114px; padding: 0 0 0 10px; }
   #app .discard-area button { margin: 6px 0; min-height: 36px; padding: 8px; }
@@ -1062,7 +1067,7 @@ footer {
   #app .stats div > span { font-size: 10px; }
   #app .recording-panel > p { display: none; }
   #app .mode-options { margin-top: 8px; }
-  #app .hand-card svg { width: 56px; height: 56px; }
+  #app .hand-card .road-art { width: 56px; height: 56px; }
 }
 
 @media (max-width: 899px) {
@@ -1083,3 +1088,95 @@ footer {
     scroll-behavior: auto !important;
   }
 }
+
+/* 結算視窗「先看一下地圖」／側欄「查看本局成績」 */
+.view-map {
+  display: block;
+  width: 100%;
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  border: 1px solid #446b41;
+  border-radius: 9px;
+  background: transparent;
+  color: #2f4f2d;
+  font: inherit;
+  cursor: pointer;
+}
+.view-map:hover { background: #e1e8d2; }
+
+
+/* ===== 配色主題：淺灰背景、深灰遊戲區、米白字 =====
+   必須放在檔案最後，才能覆蓋前面的顏色設定；要調色只改下面變數即可。 */
+:root {
+  --page-bg: #5D5D66;      /* 淺灰：整頁背景 */
+  --game-bg: #414147;      /* 深灰：遊戲區域 */
+  --game-bg-2: #3b3b3b;    /* 深灰（較亮）：格子、卡片、按鈕 */
+  --game-line: #555;       /* 遊戲區框線 */
+  --cream: #f3ecd8;        /* 米白：遊戲區主要字色 */
+  --cream-muted: #c9c1aa;  /* 米白（較暗）：次要說明字 */
+  --page-text: #2b2b2b;    /* 淺灰背景上的字（米白在淺灰上看不清楚） */
+  background: var(--page-bg);
+  color: var(--page-text);
+}
+body { background: var(--page-bg); }
+
+/* 淺灰背景上的頂部列與頁面標題 */
+.topbar, .workspace-nav { background: var(--page-bg); border-color: #bdbdbd; }
+.workspace-nav button { border-color: #6b6b6b; color: var(--page-text); }
+.workspace-nav button[aria-pressed="true"] { background: var(--game-bg); color: var(--cream); }
+.brand-mark { background: var(--game-bg); }
+.text-button { color: var(--page-text); }
+.edition, .eyebrow, .subtitle, footer { color: #5e5e5e; }
+.player-chip { background: #c8c8c8; border-color: #b5b5b5; }
+.player-chip small { color: #555; }
+
+/* 深灰遊戲區域：地圖、探勘面板、手牌 */
+.mine-panel, .expedition-panel, .hand-panel {
+  background: var(--game-bg);
+  border-color: var(--game-line);
+  color: var(--cream);
+}
+.mine-panel .eyebrow, .expedition-panel .eyebrow, .hand-panel .eyebrow,
+.panel-top .eyebrow, h2 span, .compass, .column-labels, .map-footer,
+.section-label, .timer-label, .timer span, .stats div > span, .stats small,
+.mission-note p, .save-note, .hand-heading p:not(.eyebrow), .card-number,
+.hand-card small, .discard-area > span, .discard-area small, .notice {
+  color: var(--cream-muted);
+}
+.timer, .stats strong, .mission-note strong, .hand-card > span:not(.card-number) { color: var(--cream); }
+.timer.urgent { color: #ff9b73; }
+.section-label span { background: var(--game-bg-2); }
+.time-track { background: var(--game-bg-2); }
+.mission-note, .notice { border-color: var(--game-line); }
+
+/* 地圖格子 */
+.cell { background: var(--game-bg-2); border-color: var(--game-line); color: var(--cream-muted); }
+.cell-mark { color: #777; }
+.cell.target { background: #46443c; color: #e2cf8f; }
+.cell.occupied { color: var(--cream-muted); border-color: #8a8a8a; }
+.cell.entrance { background: var(--cream); border-color: var(--cream); color: #2f2f2f; }
+
+/* 手牌、按鈕、紀錄模式面板 */
+.hand-card { background: var(--game-bg-2); border-color: var(--game-line); color: var(--cream); }
+.hand-card.selected { background: #4d4b42; border-color: var(--cream); }
+.hand-card:not(:disabled):hover { border-color: var(--cream-muted); }
+.hand-card .road-art { background: #262626; }
+.discard-area { border-color: var(--game-line); }
+.discard-area button { color: var(--cream); border-color: var(--cream-muted); }
+.recording-panel { background: var(--game-bg-2); border-color: var(--game-line); color: var(--cream); }
+.recording-panel button { background: #4a4a4a; border-color: var(--cream-muted); color: var(--cream); }
+.primary { background: var(--cream); color: #2f2f2f; }
+.primary:hover { background: #fffaf0; }
+.expedition-panel .text-button, .hand-panel .text-button { color: var(--cream); }
+
+/* 規則／結算視窗也用深灰底米白字 */
+.overlay { background: #1a1a1acc; }
+.dialog { background: var(--game-bg); color: var(--cream); }
+.dialog ol, .muted, .result-stats span { color: var(--cream-muted); }
+.result-score { color: var(--cream); }
+.result-stats { border-color: var(--game-line); }
+.dialog .text-button { color: var(--cream); }
+
+/* 「先看一下地圖」「查看本局成績」 */
+.view-map { border-color: var(--cream-muted); color: var(--cream); }
+.view-map:hover { background: var(--game-bg-2); }

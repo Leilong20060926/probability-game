@@ -387,3 +387,90 @@ test(
     );
   },
 );
+
+// 0.3.0 規則：第 6 欄第 2、4 列可以放牌，並可從上／下接入終點。
+const pathToRow1Col4 = () => ({
+  status: 'playing',
+  board: {
+    '2,1': 'horizontal',
+    '2,2': 'horizontal',
+    '2,3': 'bend-ul',
+    '1,3': 'bend-dr',
+    '1,4': 'horizontal',
+  },
+});
+
+test('cells between targets in column 6 accept any road that fits', () => {
+  const g = pathToRow1Col4();
+
+  for (const id of ['horizontal', 'cross', 'bend-ul', 'bend-dl', 'tee-left']) {
+    assert.equal(canPlace(g, id, 1, 5), true, id);
+  }
+  // 沒有朝左的牌接不到第 5 欄的道路
+  assert.equal(canPlace(g, 'vertical', 1, 5), false);
+  // 終點格本身仍不能放牌
+  assert.equal(canPlace(g, 'horizontal', 0, 5), false);
+});
+
+test('a road below or above a target connects to it', () => {
+  const up = pathToRow1Col4();
+  up.board['1,5'] = 'bend-ul';
+  assert.equal(reachable(up).has('0,5'), true);
+  assert.equal(reachable(up).has('2,5'), false);
+
+  const down = pathToRow1Col4();
+  down.board['1,5'] = 'bend-dl';
+  assert.equal(reachable(down).has('2,5'), true);
+  assert.equal(reachable(down).has('0,5'), false);
+
+  const both = pathToRow1Col4();
+  both.board['1,5'] = 'tee-left';
+  assert.equal(reachable(both).has('0,5'), true);
+  assert.equal(reachable(both).has('2,5'), true);
+});
+
+test('targets are still endpoints: paths do not pass through them', () => {
+  // 由左邊接到第 3 列終點，不能穿過終點走到第 2、4 列
+  const g = {
+    status: 'playing',
+    board: {
+      '2,1': 'horizontal', '2,2': 'horizontal',
+      '2,3': 'horizontal', '2,4': 'horizontal',
+    },
+  };
+  assert.equal(reachable(g).has('2,5'), true);
+  assert.equal(canPlace(g, 'vertical', 1, 5), false);
+  assert.equal(canPlace(g, 'cross', 3, 5), false);
+});
+
+test('reaching a coin from below reveals it during play', () => {
+  const g = fresh();
+  g.goldRow = 4;
+  Object.assign(g.board, pathToRow1Col4().board);
+  g.placed.push(...Object.keys(g.board));
+  g.hand[0] = 'bend-ul';
+  g.deck = ['horizontal'];
+
+  assert.equal(act(g, 0, [1, 5], 2000), true);
+  assert.deepEqual(g.revealed, [0]);
+  assert.equal(g.coins, 1);
+  assert.equal(g.status, 'playing');
+});
+
+test('connecting a coin and the gold in one move counts the coin too', () => {
+  for (const goldRow of [0, 2]) {
+    const g = fresh();
+    g.goldRow = goldRow;
+    Object.assign(g.board, pathToRow1Col4().board);
+    g.placed.push(...Object.keys(g.board));
+    g.hand[0] = 'tee-left'; // 第 6 欄第 2 列，同時接通第 1、3 列終點
+
+    assert.equal(act(g, 0, [1, 5], 2000), true);
+    assert.equal(g.status, 'finished');
+    assert.equal(g.reason, 'gold');
+    assert.equal(g.coins, 1, `goldRow=${goldRow}`);
+    assert.equal(g.score, 80, `goldRow=${goldRow}`);
+    const reveals = g.events.filter(e => e.type === 'reveal');
+    assert.deepEqual(reveals.map(e => e.reward), ['coin', 'gold']);
+  }
+});

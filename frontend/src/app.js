@@ -19,6 +19,7 @@ let restoredRequest = null;
 let mode = null;
 let trial = null;
 let presentation = null;
+let resultHidden = false; // 結算視窗暫時收起，讓玩家查看最後的地圖
 
 function api(path, options) {
   if (mode === 'trial') return trial(path, options);
@@ -44,6 +45,7 @@ function changeMode() {
 const modeLabel = () => mode === 'trial' ? '不記錄試玩' : mode === 'server' ? '記錄資料' : '尚未選擇紀錄模式';
 
 function accept(view) {
+  if (!view || view.id !== game?.id || view.status !== game?.status) resultHidden = false;
   game = view;
   if (view) {
     player.id = view.playerId;
@@ -140,28 +142,16 @@ const reasons = {
   abandoned: '提前結束探勘',
 };
 
+// 道路牌圖片：frontend/assets/cards/<牌的 id>.png（透明背景、正方形）。
+// 圖上的通道方向必須和 engine.js CARDS 的 ports 一致。
 function road(id, label = true) {
-  const ports = card(id)?.ports || '';
-
-  const lines = {
-    U: 'M50 50V0',
-    D: 'M50 50V100',
-    L: 'M50 50H0',
-    R: 'M50 50H100',
-  };
-
   return `
-    <svg viewBox="0 0 100 100" aria-hidden="true">
-      <rect
-        x="3" y="3" width="94" height="94"
-        rx="12" fill="currentColor"
-      />
-      ${[...ports].map(p => `
-        <path d="${lines[p]}" class="tunnel-shadow"/>
-        <path d="${lines[p]}" class="tunnel"/>
-      `).join('')}
-      <circle cx="50" cy="50" r="7" fill="#b4ad8e"/>
-    </svg>
+    <img
+      class="road-art"
+      src="./assets/cards/${id}.png"
+      alt=""
+      draggable="false"
+    >
     ${label ? `<span>${card(id).name}</span>` : ''}
   `;
 }
@@ -233,9 +223,11 @@ function board() {
               ? '<span class="mine-icon">⚒</span><small>入口</small>'
               : target
                 ? `
-                  <span class="target-symbol">
-                    ${revealed ? (endpoint.reward === 'gold' ? '◆' : '●') : '?'}
-                  </span>
+                  ${
+                    revealed
+                      ? `<img class="target-art" src="./assets/targets/${endpoint.reward === 'gold' ? 'golden' : 'coin'}.png" alt="" draggable="false">`
+                      : '<span class="target-symbol">?</span>'
+                  }
                   <small>
                     ${revealed ? (endpoint.reward === 'gold' ? '金礦' : '金幣') : '未知礦藏'}
                   </small>
@@ -411,6 +403,9 @@ function render() {
           ${
             !playing
               ? `
+                ${game?.status === 'finished' && resultHidden
+                  ? '<button class="view-map" data-action="show-result">查看本局成績</button>'
+                  : ''}
                 <button class="primary" data-action="start">
                   ${game ? '再探勘一次' : '開始探勘'}
                   <span>→</span>
@@ -511,7 +506,7 @@ function render() {
 
     ${help ? helpDialog() : ''}
     ${
-      game?.status === 'finished' && !help
+      game?.status === 'finished' && !help && !resultHidden
         ? resultDialog()
         : ''
     }
@@ -548,7 +543,8 @@ function helpDialog() {
             並繼續抽牌。
           </li>
           <li>
-            接通右側終點才會揭曉礦藏。
+            接通右側終點才會揭曉礦藏。終點可以從左邊、上方或下方接入，
+            終點之間的空格也可以鋪路。
             金幣加分後繼續，找到金礦立即結束。
             若本回合落石讓新翻開的金幣終點斷線，該次翻牌與金幣會撤銷；之後其他回合才斷線則保留。
           </li>
@@ -627,6 +623,10 @@ function resultDialog() {
         ${pending && !busy ? '<button data-action="retry">重試連線／同步</button>' : ''}
         <button class="primary" data-action="start">
           同一位玩家，再玩一次 →
+        </button>
+
+        <button class="view-map" data-action="hide-result">
+          先看一下地圖（可再打開成績）
         </button>
 
         <button
@@ -744,6 +744,15 @@ function bind() {
         case 'next-player':
           nextPlayer();
           break;
+        case 'hide-result':
+          resultHidden = true;
+          notice = '已收起成績視窗；按「查看本局成績」可以再打開。';
+          render();
+          break;
+        case 'show-result':
+          resultHidden = false;
+          render();
+          break;
         case 'retry':
           if (pending) run(pending);
           break;
@@ -767,6 +776,9 @@ document.addEventListener('visibilitychange', () => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && help) {
     help = false;
+    render();
+  } else if (event.key === 'Escape' && game?.status === 'finished' && !resultHidden) {
+    resultHidden = true;
     render();
   }
 
