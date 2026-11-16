@@ -77,6 +77,9 @@ test('player UI blocks uncertain mutations, retries same create key, and recover
     await import('../frontend/src/app.js?ui-test');
     await settle();
     assert.equal(requests.length,0, 'opening the page must not create a server player or game');
+    assert.match(html,/探勘員手冊/, 'rules open automatically when the page is first loaded');
+    button('close-help').onclick();
+    assert.doesNotMatch(html,/探勘員手冊/);
     assert.equal(button('start').disabled,true);
     button('choose-trial').onclick();
     await settle();
@@ -90,6 +93,7 @@ test('player UI blocks uncertain mutations, retries same create key, and recover
     button('end').onclick();
     await settle();
     assert.match(html,/本局未儲存、未上傳/);
+    assert.doesNotMatch(html,/探勘員手冊/, 'rules do not reopen after a game');
     assert.equal(requests.length,0, 'practice actions and results must never call backend APIs');
     button('change-mode').onclick();
     button('choose-server').onclick();

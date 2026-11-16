@@ -8,7 +8,7 @@ let player = { id: '', nextAttempt: 1 };
 let game = null;
 let selected = null;
 let notice = '';
-let help = false;
+let help = true; // 開啟／重新整理頁面時先顯示遊戲規則；關閉後，再玩一局、換玩家都不會再自動跳出
 let busy = false;
 let pending = null;
 let connected = false;
@@ -556,8 +556,9 @@ function helpDialog() {
         </ol>
 
         <p class="muted">
-          ${mode === 'trial' ? '計時開始後，切換分頁仍會計時；重整或關閉會丟棄試玩局。' : '記錄模式計時開始後，切換分頁或關閉頁面仍會計時。'}
-          ${mode === 'trial' ? '不記錄試玩僅在本頁運作，重整或關閉即消失。' : '記錄模式的操作與成績由伺服器確認；斷線時請重試連線。'}
+          ${mode === null ? '關閉手冊後，請先選擇紀錄模式：不記錄試玩只在本頁運作，重整或關閉即消失；記錄資料的操作與成績由伺服器確認並保存。計時開始後，切換分頁仍會計時。'
+            : mode === 'trial' ? '計時開始後，切換分頁仍會計時；重整或關閉會丟棄試玩局。不記錄試玩僅在本頁運作，重整或關閉即消失。'
+            : '記錄模式計時開始後，切換分頁或關閉頁面仍會計時。記錄模式的操作與成績由伺服器確認；斷線時請重試連線。'}
         </p>
 
         <button class="primary" data-action="close-help">
