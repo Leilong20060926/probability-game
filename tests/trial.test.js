@@ -15,6 +15,9 @@ test('disposable practice has isolated memory state and never needs storage or n
     assert.equal(game.mode,'trial');
     assert.equal(game.hand.length,5);
     assert.equal(game.deckRemaining,17);
+    assert.equal(game.deckCounts.rock,4);
+    assert.equal(Object.values(game.deckCounts).reduce((a,b)=>a+b,0),17);
+    for (const id of game.hand) assert.ok(id in game.deckCounts);
     assert.ok(!('goldRow' in game) && !('deck' in game));
     const played = await trial(`/api/games/${game.id}/actions`, {body:{type:'discard',handIndex:0}});
     assert.equal(played.game.turn,1);

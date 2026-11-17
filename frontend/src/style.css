@@ -1079,6 +1079,8 @@ footer {
   #app .page-heading .eyebrow, #app .subtitle { display: none; }
   #app h1 { font-size: 18px; }
   #app .hand-panel { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -4px 18px #142d2b18; }
+  /* 開局前手牌還不能用，不要固定在底部，免得蓋住「開始探勘」 */
+  #app .hand-panel.idle { position: static; box-shadow: none; }
   #app .hand-panel > .notice { margin-top: 8px; padding: 8px 0; min-height: 0; }
 }
 
@@ -1281,3 +1283,42 @@ body { background: var(--page-bg); }
   .tour-ring { animation: none; }
   .tour-progress i { transition: none; }
 }
+
+/* ===== 剩餘牌庫組成 ===== */
+.deck-panel { grid-column: 1 / -1; margin: 0 0 14px; padding: 10px; border: 1px solid var(--game-line); border-radius: 8px; background: var(--game-bg-2); }
+.deck-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--cream); }
+.deck-head small { color: var(--cream-muted); font-variant-numeric: tabular-nums; }
+.deck-panel ul { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 4px; margin: 8px 0 6px; padding: 0; list-style: none; }
+.deck-panel li { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.deck-panel li img, .deck-panel li i {
+  display: grid; place-items: center;
+  width: 100%; max-width: 44px; aspect-ratio: 1;
+  border-radius: 5px; background: #262626; object-fit: contain;
+}
+.deck-panel li i { font-style: normal; font-size: 18px; background: #4a2d26; }
+.deck-panel li b { font-size: 12px; line-height: 1.2; color: var(--cream); font-variant-numeric: tabular-nums; }
+.deck-panel li b::before { content: '×'; margin-right: 1px; font-weight: 400; color: var(--cream-muted); }
+.deck-panel li.rock b { color: #f2b665; }
+.deck-panel li.empty img, .deck-panel li.empty i, .deck-panel li.empty b { opacity: .3; }
+.deck-panel p { margin: 0; font-size: 11px; line-height: 1.5; color: var(--cream-muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (min-width: 900px) and (min-height: 600px) {
+  #app .expedition-panel { overflow-y: auto; }
+  #app .deck-panel { margin-bottom: 8px; padding: 8px; }
+  #app .deck-panel ul { margin: 6px 0 4px; gap: 4px; }
+  #app .deck-panel li img, #app .deck-panel li i { max-width: 30px; }
+  #app .deck-panel li i { font-size: 14px; }
+  #app .deck-panel li b { font-size: 11px; }
+  /* 面板內容太高時，紀錄模式與「開始探勘」固定在面板底部，不會被擠到看不見 */
+  #app .expedition-actions {
+    position: sticky; bottom: -12px; z-index: 1;
+    margin-bottom: -12px; padding: 8px 0 12px;
+    background: var(--game-bg);
+    box-shadow: 0 -10px 12px -6px var(--game-bg);
+  }
+}
+
+/* 教學卡上的連線問題：直接在卡片上重試或改用試玩，不用關掉教學 */
+.tour-card .tour-problem { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding: 10px; border-left: 3px solid #ff9b73; border-radius: 4px; background: #ff9b731a; }
+.tour-card .tour-problem button { flex: 1 1 auto; min-height: 40px; padding: 8px 12px; border: 1px solid var(--cream-muted); border-radius: 8px; background: transparent; color: var(--cream); font: inherit; font-size: 13px; cursor: pointer; }
+.tour-card .tour-problem button:first-child { background: var(--cream); border-color: var(--cream); color: #2f2f2f; font-weight: 700; }

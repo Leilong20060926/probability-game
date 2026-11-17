@@ -9,6 +9,7 @@ export {
   VERSION,
   CONFIG,
   CARDS,
+  deckCounts,
   card,
   key,
   newGame,

@@ -43,8 +43,8 @@ export const tourSteps = [
   },
   {
     title: '牌庫與落石',
-    targets: ['.stats'],
-    body: '牌庫 17 張裡藏著 4 張落石。補牌抽到落石，會拆掉最後鋪設的道路，然後再抽一張。' +
+    targets: ['.deck-panel'],
+    body: '這裡列出牌庫還沒抽到的每種牌各剩幾張，以及下一張是落石的機率。牌庫 17 張裡藏著 4 張落石。補牌抽到落石，會拆掉最後鋪設的道路，然後再抽一張。' +
       '如果同一回合的落石讓剛翻開的金幣終點斷線，那次翻牌和金幣會撤銷；之後的回合才斷線則保留。' +
       '牌庫抽完後，仍可以繼續使用手牌。',
   },
@@ -61,6 +61,7 @@ export const tourSteps = [
       '沒找到金礦就是 0 分——所以在挖到金礦之前，盡量多找幾個金幣吧！',
   },
   {
+    id: 'mode',
     title: '選擇紀錄模式',
     targets: ['.recording-panel'],
     action: true,
@@ -73,9 +74,12 @@ export const tourSteps = [
     targets: ['[data-action="start"]'],
     action: true,
     done: s => s.game?.status === 'playing',
-    body: s => s.busy || s.pending
-      ? '正在準備，請稍候…'
-      : '按下「開始探勘」，計時就會開始。',
+    body: s => s.busy
+      ? (s.mode === 'server' ? '正在連線到伺服器，請稍候…' : '正在準備，請稍候…')
+      : s.pending
+        ? '連不上伺服器，所以「開始探勘」還不能按。請確認後端有在執行（npm.cmd run backend），' +
+          '並且是用 http://localhost:5174/ 開啟這個頁面，然後按「重試連線」。也可以先改用「不記錄試玩」。'
+        : '按下「開始探勘」，計時就會開始。',
   },
   {
     title: '選一張手牌',
@@ -125,6 +129,15 @@ function overlap(a, b) {
 export function scrollTourTarget(step) {
   const el = step.targets && document.querySelector(step.targets[0]);
   if (!el?.getBoundingClientRect) return;
+  // 目標在可捲動的面板裡（例如右側探勘面板）被裁掉時，先捲動那個面板。
+  for (let box = el.parentElement; box && box !== document.body; box = box.parentElement) {
+    const style = getComputedStyle(box);
+    if (!/(auto|scroll)/.test(style.overflowY) || box.scrollHeight <= box.clientHeight) continue;
+    const inner = el.getBoundingClientRect();
+    const outer = box.getBoundingClientRect();
+    if (inner.top < outer.top) box.scrollTop -= outer.top - inner.top + 8;
+    else if (inner.bottom > outer.bottom) box.scrollTop += inner.bottom - outer.bottom + 8;
+  }
   const r = el.getBoundingClientRect();
   const hand = document.querySelector('.hand-panel');
   const covered = hand && !hand.contains(el) && getComputedStyle(hand).position === 'sticky';

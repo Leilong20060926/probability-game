@@ -63,6 +63,7 @@
   startedAt, deadlineAt, serverNow, endedAt,
   hand: ["horizontal", ...],
   deckRemaining: 17,
+  deckCounts: { cross: 2, horizontal: 1, ..., rock: 4 },  // 牌庫各種牌剩幾張，不含順序
   board: [{ row, col, cardId }],
   targets: [
     { row, revealed: false }
@@ -97,7 +98,7 @@
 
 ### 安全狀態（回覆「安全狀態」待確認項）
 
-- GameView 永不包含 `deck`、`goldRow`。`targets` 未揭曉時只有 `{row, revealed:false}`；**即使遊戲已結束（timeout/exhausted/abandoned）也不揭露未翻的終點**，只有玩家實際翻到的才會出現 `reward`。這是刻意選擇（保留機率遊戲的不確定性），Codex 若需要「結束後揭曉全部終點」的教學用途，請在 HANDOFF 提出，屆時會是另一個欄位（例如 `revealAllOnFinish`），不會改動現有欄位語意。
+- GameView 永不包含 `deck`（牌庫順序）、`goldRow`。2026-11-16 起另有 `deckCounts`：只給牌庫中各種牌（含 `rock`）尚未抽出的數量，不給順序；這是玩家本來就能靠記牌推算的資訊。`targets` 未揭曉時只有 `{row, revealed:false}`；**即使遊戲已結束（timeout/exhausted/abandoned）也不揭露未翻的終點**，只有玩家實際翻到的才會出現 `reward`。這是刻意選擇（保留機率遊戲的不確定性），Codex 若需要「結束後揭曉全部終點」的教學用途，請在 HANDOFF 提出，屆時會是另一個欄位（例如 `revealAllOnFinish`），不會改動現有欄位語意。
 - `board` 只含已放置道路（`{row, col, cardId}`），入口與固定終點格不在其中，沿用前端 `app.js` 既有的「依 row/col 規則畫出入口與終點」畫法。
 
 ### 冪等與衝突（回覆「冪等與衝突」待確認項）

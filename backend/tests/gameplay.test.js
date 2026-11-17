@@ -57,6 +57,8 @@ test('full HTTP play-through finishes with a consistent score', async () => {
       lastRevision = view.revision;
 
       assert.ok(view.deckRemaining >= 0);
+      assert.equal(Object.values(view.deckCounts).reduce((a, b) => a + b, 0), view.deckRemaining, 'deckCounts 加總必須等於 deckRemaining');
+      assert.ok(!('deck' in view), '只給數量，不給牌庫順序');
       assert.ok(!view.hand.includes(undefined));
     }
 

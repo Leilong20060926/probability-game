@@ -32,6 +32,14 @@ const DIRS = [
 ];
 
 export const key = (r, c) => `${r},${c}`;
+
+// 牌庫裡尚未抽出的各種牌數量（固定順序：CARDS 的道路牌，最後是落石）。
+// 只給數量、不給順序，玩家本來就能靠記牌推算，不洩漏下一張是什麼。
+export function deckCounts(deck) {
+  const counts = Object.fromEntries([...CARDS.map(c => [c.id, 0]), ['rock', 0]]);
+  for (const id of deck) counts[id] = (counts[id] ?? 0) + 1;
+  return counts;
+}
 export const card = id => CARDS.find(c => c.id === id);
 
 const shuffle = (items, rng) => {

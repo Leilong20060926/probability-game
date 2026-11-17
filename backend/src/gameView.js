@@ -1,4 +1,4 @@
-import { CONFIG } from './engine-adapter.js';
+import { CONFIG, deckCounts } from './engine-adapter.js';
 import { clock } from './clock.js';
 
 // 安全序列化：絕不包含 deck、goldRow；未揭曉終點只給 {row, revealed:false}，
@@ -31,6 +31,7 @@ export function toSafeGameView(record) {
     endedAt: record.endedAt,
     hand: [...record.hand],
     deckRemaining: record.deck.length,
+    deckCounts: deckCounts(record.deck),
     board,
     targets,
     coins: record.coins,

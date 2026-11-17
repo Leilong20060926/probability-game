@@ -1,5 +1,5 @@
 // Explicit, disposable practice mode. No fetch, cookies, or browser storage.
-import {newGame, act, abandon, checkTimeout} from './engine.js';
+import {newGame, act, abandon, checkTimeout, deckCounts} from './engine.js';
 import {uuid} from './uuid.js';
 
 export function createTrial() {
@@ -15,7 +15,7 @@ export function createTrial() {
       mode:'trial', source:'human', config:{...game.config}, status:game.status,
       startedAt:game.startedAt, deadlineAt:game.startedAt + game.config.seconds * 1000,
       serverNow:Date.now(), endedAt:game.endedAt, hand:[...game.hand],
-      deckRemaining:game.deck.length,
+      deckRemaining:game.deck.length, deckCounts:deckCounts(game.deck),
       board:Object.entries(game.board).map(([position,cardId]) => {
         const [row,col] = position.split(',').map(Number);
         return {row,col,cardId};

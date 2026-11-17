@@ -1,4 +1,4 @@
-import { VERSION, card, canPlace } from './engine.js';
+import { VERSION, CARDS, CONFIG, card, canPlace } from './engine.js';
 import { api as serverApi, createGameRequest, actionRequest, lifecycleRequest, millis, publicBoard, escapeHtml } from './storage.js';
 import {createTrial} from './trial.js';
 import {playRockEffects,actionNotice} from './effects.js';
@@ -38,8 +38,12 @@ function chooseMode(next) {
   run(initialize);
 }
 
+// 剛選模式就連線失敗（還沒有任何一局）時，允許改選模式；其他未確認的操作仍必須先重試同步。
+const modeStuck = () => !busy && !game && (pending === initialize || pending === current);
+
 function changeMode() {
-  if (busy || pending || game?.status === 'playing') return;
+  if (busy || (pending && !modeStuck()) || game?.status === 'playing') return;
+  pending = null;
   mode = null; trial = null; game = null; selected = null;
   player = {id:'',nextAttempt:1}; connected = false;
   lifecycleQueue = []; restoredRequest = null; notice = ''; help = false;
@@ -156,6 +160,9 @@ function syncTour() {
   while (help) {
     const step = tourSteps[tour];
     if (step.inGame && game?.status !== 'playing') { help = false; break; }
+    // 改回「尚未選擇紀錄模式」時，退回選模式那一步。
+    const modeStep = tourSteps.findIndex(s => s.id === 'mode');
+    if (mode === null && tour > modeStep) { goTour(modeStep); continue; }
     if (step.done?.({mode, game, selected, busy, pending, tourTurn}) && tour < tourSteps.length - 1) {
       goTour(tour + 1);
       continue;
@@ -426,6 +433,8 @@ function render() {
             </div>
           </div>
 
+          ${deckPanel()}
+
           <div class="expedition-actions">
             <section class="recording-panel ${playing ? 'recording-active' : ''}" aria-label="資料紀錄模式">
               <h2>${modeLabel()}</h2>
@@ -438,7 +447,7 @@ function render() {
               ` : `
                 <p>${mode === 'trial' ? '本局不儲存、不上傳；重整或關閉即消失。'
                   : '本局操作與成績會保存至後端，供統計與匯出。'}</p>
-                <button data-action="change-mode" ${playing || busy || pending ? 'disabled' : ''}>切換紀錄模式</button>
+                <button data-action="change-mode" ${playing || busy || (pending && !modeStuck()) ? 'disabled' : ''}>切換紀錄模式</button>
                 <p>開局後不能切換；不會刪除以前的紀錄。</p>
               `}
             </section>
@@ -474,7 +483,7 @@ function render() {
         </aside>
       </div>
 
-      <section class="hand-panel">
+      <section class="hand-panel ${playing ? '' : 'idle'}">
         <div class="hand-heading">
           <div>
             <p class="eyebrow">YOUR HAND</p>
@@ -561,6 +570,40 @@ function render() {
   bind();
 }
 
+// 剩餘牌庫：每種牌還有幾張沒抽，以及下一張抽到落石的機率。
+// 開局前顯示整副牌的組成；舊版伺服器沒有 deckCounts 時不顯示。
+function deckPanel() {
+  const before = !game;
+  const counts = before
+    ? Object.fromEntries([...CARDS.map(c => [c.id, c.count]), ['rock', CONFIG.rocks]])
+    : game.deckCounts;
+  if (!counts) return '';
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const rocks = counts.rock ?? 0;
+  const odds = !before && total
+    ? `下一張是落石：${rocks}/${total}（${(rocks / total * 100).toFixed(1)}%）`
+    : before ? '開局發 5 張道路牌到手上，其餘洗入牌庫。' : '牌庫已抽完。';
+  const item = (id, name, n, art) => `
+    <li class="${n ? '' : 'empty'} ${id === 'rock' ? 'rock' : ''}" title="${name}：${n} 張">
+      ${art}<b>${n}</b><span class="sr-only">${name} ${n} 張</span>
+    </li>`;
+
+  return `
+    <section class="deck-panel" aria-label="剩餘牌庫組成">
+      <div class="deck-head">
+        <span>${before ? '整副牌組成' : '剩餘牌庫組成'}</span>
+        <small>${total} 張</small>
+      </div>
+      <ul>
+        ${CARDS.map(c => item(c.id, c.name, counts[c.id] ?? 0,
+          `<img src="./assets/cards/${c.id}.png" alt="" draggable="false">`)).join('')}
+        ${item('rock', '落石', rocks, '<i aria-hidden="true">🪨</i>')}
+      </ul>
+      <p>${odds}</p>
+    </section>
+  `;
+}
+
 function tourView() {
   const step = tourSteps[tour];
   const state = {mode, game, selected, busy, pending, tourTurn};
@@ -589,7 +632,12 @@ function tourView() {
         </div>
         <h2 id="tour-title">${step.title}</h2>
         <p id="tour-body">${body}</p>
-        ${waiting ? '<p class="tour-task">👉 請操作框起來的地方，完成後會自動進入下一步。</p>' : ''}
+        ${pending && !busy ? `
+          <div class="tour-problem" role="alert">
+            <button data-action="retry">重試連線</button>
+            ${modeStuck() && mode === 'server' ? '<button data-action="trial-instead">改用不記錄試玩</button>' : ''}
+          </div>`
+        : waiting ? '<p class="tour-task">👉 請操作框起來的地方，完成後會自動進入下一步。</p>' : ''}
         <div class="tour-actions">
           <button class="tour-skip" data-action="close-help">${last ? '關閉' : '跳過教學'}</button>
           <button class="tour-prev" data-action="tour-prev" ${tour === 0 ? 'disabled' : ''}>上一步</button>
@@ -750,6 +798,13 @@ function bind() {
         case 'choose-trial': chooseMode('trial'); break;
         case 'choose-server': chooseMode('server'); break;
         case 'change-mode': changeMode(); break;
+        case 'trial-instead': {
+          const keepTour = help; // changeMode() 會關掉教學；從教學卡改用試玩時要讓教學繼續
+          changeMode();
+          help = keepTour;
+          chooseMode('trial');
+          break;
+        }
         case 'start':
           start();
           break;
