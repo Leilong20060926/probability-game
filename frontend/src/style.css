@@ -1208,3 +1208,76 @@ body { background: var(--page-bg); }
 @media (prefers-reduced-motion: reduce) {
   .rock-alert { animation: none; }
 }
+
+/* ===== 使用教學：遮罩挖洞框出目標，說明卡跟著目標移動 ===== */
+.tour { position: fixed; inset: 0; z-index: 15; pointer-events: none; }
+.tour-shade {
+  position: fixed;
+  inset: 0;
+  background: #121214c4;
+  pointer-events: auto; /* 洞以外的地方不能點；clip-path 挖掉的洞可以點穿 */
+}
+.tour-ring {
+  position: fixed;
+  border: 3px solid #f2c75c;
+  border-radius: 12px;
+  box-shadow: 0 0 0 4px #f2c75c40, 0 0 24px #f2c75c80;
+  pointer-events: auto; /* 說明步驟：框內只能看，不能點 */
+  animation: tour-pulse 1.6s ease-in-out infinite;
+}
+.tour.interactive .tour-ring { pointer-events: none; } /* 操作步驟：框內可以點 */
+@keyframes tour-pulse {
+  50% { box-shadow: 0 0 0 9px #f2c75c26, 0 0 32px #f2c75caa; }
+}
+.tour-card {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  visibility: hidden; /* 定位完成後才顯示，避免閃到左上角 */
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 20px 22px;
+  border: 1px solid #f2c75c66;
+  border-radius: 14px;
+  background: var(--game-bg);
+  color: var(--cream);
+  box-shadow: 0 18px 50px #000a;
+  pointer-events: auto;
+  outline: none;
+}
+.tour-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.tour-card .eyebrow { color: #e2cf8f; margin: 0; }
+.tour-count { font-size: 12px; color: var(--cream-muted); font-variant-numeric: tabular-nums; }
+.tour-progress { height: 4px; margin: 10px 0 14px; border-radius: 4px; background: var(--game-bg-2); overflow: hidden; }
+.tour-progress i { display: block; height: 100%; background: #f2c75c; transition: width .25s; }
+.tour-card h2 { margin: 0 0 8px; font-size: 20px; }
+.tour-card p { margin: 0; font-size: 14px; line-height: 1.8; color: var(--cream-muted); }
+.tour-card .tour-task {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-left: 3px solid #f2c75c;
+  border-radius: 4px;
+  background: #f2c75c1a;
+  color: var(--cream);
+  font-size: 13px;
+}
+.tour-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.tour-actions button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--cream-muted);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cream);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tour-actions .tour-skip { margin-right: auto; border-color: transparent; padding-left: 0; color: var(--cream-muted); text-decoration: underline; }
+.tour-actions .tour-next { background: var(--cream); border-color: var(--cream); color: #2f2f2f; font-weight: 700; }
+.tour-actions button:disabled { opacity: .4; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .tour-ring { animation: none; }
+  .tour-progress i { transition: none; }
+}

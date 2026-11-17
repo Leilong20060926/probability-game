@@ -2,13 +2,17 @@ import { VERSION, card, canPlace } from './engine.js';
 import { api as serverApi, createGameRequest, actionRequest, lifecycleRequest, millis, publicBoard, escapeHtml } from './storage.js';
 import {createTrial} from './trial.js';
 import {playRockEffects,actionNotice} from './effects.js';
+import {tourSteps, placeTour, scrollTourTarget} from './tour.js';
 
 const app = document.querySelector('#app');
 let player = { id: '', nextAttempt: 1 };
 let game = null;
 let selected = null;
 let notice = '';
-let help = true; // 開啟／重新整理頁面時先顯示遊戲規則；關閉後，再玩一局、換玩家都不會再自動跳出
+let help = true; // 開啟／重新整理頁面時先顯示使用教學；關閉後，再玩一局、換玩家都不會再自動跳出
+let tour = 0; // 使用教學目前的步驟（tour.js 的 tourSteps 索引）
+let tourTurn = 0; // 進入「選一張手牌」時的行動回合，用來判斷玩家是否完成第一個行動
+let tourShown = -1; // 上次畫出的步驟，步驟改變時才捲動與移動焦點
 let busy = false;
 let pending = null;
 let connected = false;
@@ -135,6 +139,43 @@ function deliverLifecycle(request) {
   });
 }
 
+function openTour() {
+  help = true;
+  tour = 0;
+  tourShown = -1;
+  render();
+}
+
+function goTour(index) {
+  tour = Math.max(0, Math.min(index, tourSteps.length - 1));
+  if (tourSteps[tour].inGame) tourTurn = game?.turn ?? 0;
+}
+
+// 操作步驟完成就自動往下；遊戲中的步驟在遊戲結束時關閉教學，讓結算視窗出現。
+function syncTour() {
+  while (help) {
+    const step = tourSteps[tour];
+    if (step.inGame && game?.status !== 'playing') { help = false; break; }
+    if (step.done?.({mode, game, selected, busy, pending, tourTurn}) && tour < tourSteps.length - 1) {
+      goTour(tour + 1);
+      continue;
+    }
+    break;
+  }
+}
+
+function prevTour() {
+  let index = tour - 1;
+  // 跳過已完成的操作步驟，否則會立刻又被自動推回來。
+  while (index > 0 && tourSteps[index].done?.({mode, game, selected, busy, pending, tourTurn})) index--;
+  goTour(index);
+  render();
+}
+
+function positionTour() {
+  if (help) placeTour(app.querySelector('.tour'), tourSteps[tour]);
+}
+
 const reasons = {
   gold: '成功找到金礦',
   timeout: '探勘時間結束',
@@ -245,6 +286,7 @@ function board() {
 }
 
 function render() {
+  if (help) syncTour();
   const playing = game?.status === 'playing';
 
   app.innerHTML = `
@@ -264,7 +306,7 @@ function render() {
       <div class="header-right">
         <span class="edition">機率遊戲專題 · 單人探勘</span>
         <button class="text-button" data-action="help">
-          遊戲規則 <span>↗</span>
+          使用教學 <span>↗</span>
         </button>
       </div>
     </header>
@@ -504,7 +546,7 @@ function render() {
       </footer>
     </main>
 
-    ${help ? helpDialog() : ''}
+    ${help ? tourView() : ''}
     ${presentation?.phase === 'alert' ? '<div class="rock-alert" role="alert">💥 抽到破壞牌</div>' : ''}
     ${
       game?.status === 'finished' && !help && !resultHidden
@@ -519,57 +561,42 @@ function render() {
   bind();
 }
 
-function helpDialog() {
+function tourView() {
+  const step = tourSteps[tour];
+  const state = {mode, game, selected, busy, pending, tourTurn};
+  const body = typeof step.body === 'function' ? step.body(state) : step.body;
+  const last = tour === tourSteps.length - 1;
+  const waiting = step.action && !step.done?.(state);
+
   return `
-    <div class="overlay">
+    <div class="tour ${step.action ? 'interactive' : ''}">
+      <div class="tour-shade"></div>
+      <div class="tour-rings"></div>
       <section
-        class="dialog"
+        class="tour-card"
         role="dialog"
-        aria-modal="true"
-        aria-labelledby="dialog-title"
+        aria-modal="${step.action ? 'false' : 'true'}"
+        aria-labelledby="tour-title"
+        aria-describedby="tour-body"
         tabindex="-1"
       >
-        <p class="eyebrow">FIELD GUIDE</p>
-        <h2 id="dialog-title">探勘員手冊</h2>
-
-        <ol>
-          <li>
-            從 5 張道路手牌中選一張，放到亮起的合法位置。
-          </li>
-          <li>
-            道路不能旋轉，必須連通入口，與相鄰牌的接口吻合。
-          </li>
-          <li>
-            出牌或棄牌後抽牌。
-            抽牌時抽到落石會拆掉最後鋪設的道路，
-            並重新抽牌。
-          </li>
-          <li>
-            接通右側三個終點才會揭曉礦藏。終點可以從左邊、上方或下方接入，
-            終點之間的空格也可以鋪路。
-          </li>
-          <li> 
-            找到金幣加分後繼續，找到金礦立即結束。
-            若本回合落石讓新翻開的金幣終點斷線，該次翻牌與金幣會撤銷；之後其他回合才斷線則保留。
-          </li>
-          <li>
-            限時 5 分鐘；牌庫空後仍可使用手牌。
-            倒數結束後還未找到金礦得 0 分。
-          </li>
-          <li>
-            在找到金礦之前找到更多金幣吧!!
-          </li>
-        </ol>
-
-        <p class="muted">
-          ${mode === null ? '關閉手冊後，請先選擇紀錄模式：不記錄試玩只在本頁運作，重整或關閉即消失；記錄資料的操作與成績由伺服器確認並保存。計時開始後，切換分頁仍會計時。'
-            : mode === 'trial' ? '計時開始後，切換分頁仍會計時；重整或關閉會丟棄試玩局。不記錄試玩僅在本頁運作，重整或關閉即消失。'
-            : '記錄模式計時開始後，切換分頁或關閉頁面仍會計時。記錄模式的操作與成績由伺服器確認；斷線時請重試連線。'}
-        </p>
-
-        <button class="primary" data-action="close-help">
-          了解，回到礦坑 →
-        </button>
+        <div class="tour-head">
+          <p class="eyebrow">FIELD GUIDE · 探勘員手冊</p>
+          <span class="tour-count">${tour + 1} / ${tourSteps.length}</span>
+        </div>
+        <div class="tour-progress" aria-hidden="true">
+          <i style="width:${((tour + 1) / tourSteps.length) * 100}%"></i>
+        </div>
+        <h2 id="tour-title">${step.title}</h2>
+        <p id="tour-body">${body}</p>
+        ${waiting ? '<p class="tour-task">👉 請操作框起來的地方，完成後會自動進入下一步。</p>' : ''}
+        <div class="tour-actions">
+          <button class="tour-skip" data-action="close-help">${last ? '關閉' : '跳過教學'}</button>
+          <button class="tour-prev" data-action="tour-prev" ${tour === 0 ? 'disabled' : ''}>上一步</button>
+          ${last
+            ? '<button class="tour-next" data-action="close-help">開始挖礦 →</button>'
+            : `<button class="tour-next" data-action="tour-next" ${waiting ? 'disabled' : ''}>下一步 →</button>`}
+        </div>
       </section>
     </div>
   `;
@@ -732,8 +759,16 @@ function bind() {
           break;
 
         case 'help':
-          help = true;
+          openTour();
+          break;
+
+        case 'tour-next':
+          goTour(tour + 1);
           render();
+          break;
+
+        case 'tour-prev':
+          prevTour();
           break;
 
         case 'close-help':
@@ -772,11 +807,25 @@ function bind() {
 
   app.querySelector('.dialog')?.focus();
 
+  if (help) {
+    const changed = tourShown !== tour;
+    tourShown = tour;
+    if (changed && typeof innerHeight === 'number') scrollTourTarget(tourSteps[tour]);
+    positionTour();
+    if (changed) app.querySelector('.tour-next:not(:disabled)')?.focus?.();
+  }
+
   if (!app.querySelector('.dialog') && selected !== null) {
     app.querySelector(
       `[data-hand="${selected}"]`,
     )?.focus();
   }
+}
+
+if (typeof window !== 'undefined') {
+  // 捲動或縮放時讓框線跟著目標移動。
+  window.addEventListener('scroll', positionTour, true);
+  window.addEventListener('resize', positionTour);
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -825,6 +874,7 @@ document.addEventListener('keydown', event => {
 });
 
 setInterval(() => {
+  positionTour(); // 圖片載入、版面變化後重新對齊教學框
   if (game?.status !== 'playing') return;
 
   if (!remaining() && !busy && !pending) {
