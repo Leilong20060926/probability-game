@@ -34,11 +34,12 @@ export function readJsonBody(req) {
   });
 }
 
-export function sendJson(res, status, body) {
+export function sendJson(res, status, body, headers = {}) {
   const text = JSON.stringify(body);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
+    ...headers,
   });
   res.end(text);
 }

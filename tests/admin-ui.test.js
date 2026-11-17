@@ -2,6 +2,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {formalFilters} from '../frontend/src/route-records.js';
 
 test('public records UI loads, filters, paginates, retries and downloads without login calls', async () => {
   const originals=Object.fromEntries(['document','location','fetch','FormData','setTimeout'].map(k=>[k,Object.getOwnPropertyDescriptor(globalThis,k)]));
@@ -15,6 +16,7 @@ test('public records UI loads, filters, paginates, retries and downloads without
   const downloaded=[];
   const calls=[];
   let fail=false;
+  const exact=JSON.parse(await readFile(new URL('../frontend/data/route-analysis.json',import.meta.url),'utf8')).scenarios[0];
   globalThis.document={
     querySelector:node,
     querySelectorAll:selector=>selector==='[data-export]' ? exports : [...nodes.values(),...exports],
@@ -28,6 +30,7 @@ test('public records UI loads, filters, paginates, retries and downloads without
     if(fail) return Response.json({error:{code:'UNAVAILABLE',message:'暫時無法讀取'}},{status:503});
     const url=new URL(path,'https://test.example');
     if(url.pathname.endsWith('.csv')) return new Response('gameId\r\ntest-game\r\n',{headers:{'Content-Type':'text/csv'}});
+    if(url.pathname==='/api/route/analysis')return Response.json(exact);
     if(url.pathname==='/api/admin/stats') return Response.json({games:51,players:2,finished:1,goldFinishRate:0,avgScore:0,avgDurationMs:1000,byReason:{abandoned:1},byScore:{0:1}});
     assert.equal(url.pathname,'/api/admin/games');
     return Response.json({total:51,page:Number(url.searchParams.get('page')),pageSize:50,games:[{id:'game-1',playerId:'player-1',attempt:1,status:'finished',reason:'abandoned',score:0,turns:1,durationMs:1000}]});
@@ -49,8 +52,15 @@ test('public records UI loads, filters, paginates, retries and downloads without
     refresh();await settle();
     assert.ok(calls.at(-1).path.includes('version=0.2.0'));
     assert.match(node('#page-info').textContent,/第 1 頁/);
+    const fields=Object.keys(formalFilters).map(name=>({name,value:''}));fields.namedItem=name=>fields.find(field=>field.name===name);
+    node('#filters').elements=fields;
+    node('#formal').onclick();await settle();
+    assert.match(node('#stats').innerHTML,/來源 exact_dp/);
+    assert.equal(fields.namedItem('ruleset').value,'route-v1');
     for(const button of exports) await button.onclick();
     assert.deepEqual(downloaded,['games.csv','events.csv']);
+    const exported=calls.filter(call=>call.path.includes('.csv?'));
+    for(const call of exported){const query=new URL(call.path,'https://test.example').searchParams;assert.equal(query.get('ruleset'),'route-v1');assert.equal(query.get('configId'),formalFilters.configId);}
     fail=true;refresh();await settle();
     assert.equal(node('#games').innerHTML,'');
     assert.equal(node('#page-info').textContent,'');

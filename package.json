@@ -8,7 +8,10 @@
     "build": "node scripts/build.mjs",
     "backend": "node backend/src/server.js",
     "backend:migrate": "node backend/src/migrate.js",
-    "test:backend": "node --test backend/tests"
+    "test:backend": "node --test backend/tests",
+    "test:route": "node --test tools/route-version/tests",
+    "test:route:sim": "node --test tools/route-version/validation",
+    "route": "node tools/route-version/cli.mjs"
   },
   "engines": {
     "node": ">=22.5"

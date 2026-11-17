@@ -1,5 +1,19 @@
 # 協作交接
 
+## 三地圖路段版交接定案（2026-11-18，尚未實作）
+
+Codex 已完整閱讀使用者新 PDF（13 頁）、完整文字檔及後補遊戲流程圖，整理 `docs/CLAUDE_ROUTE_V1_PROMPT.md`。文字原檔的完整副本是 `docs/ROUTE_V1_SPEC.md`，雜湊與使用者檔案一致。這一輪僅準備／更新交接文件，未實作三地圖引擎、精算或後端。
+
+使用者明確決定：
+
+1. 正式地圖一 B 線用文字基準 HH→HV，PDF 第 12 頁的 HV→HV 只作比較情境。
+2. 嚴格 300 秒截止：滿 300 秒送達的新操作算超時；截止前完成的金礦保留。流程圖底的優先順序不允許到期請求繼續挖礦；既有成功 actionId 在截止後重試仍重放原結果。
+3. 參數先透過 CLI 切換與精算比較，正式遊戲固定版本；這輪不做網頁參數編輯或配置寫入 API。
+
+Claude 負責新共用純引擎／分數精確遞迴／CLI 與後端／測試；Codex 負責新路段圖、付款操作、API 銜接、試玩、提示／分析 UI 與前端 review。新規則不沿用舊 5×6 落石拆路／unreveal，精算是主要結果，模擬只驗證。完整分工、過渡契約、資料遷移與驗收見 prompt。
+
+已用 BigInt 有理數作表內代數核對：給定 p_i 可推得全部平均 p、基準 PMF/E/Var 及比較情境的捨入統計量；尚未由狀態遞迴獨立驗證各 p_i。付款／硬挖的平手列舉順序仍有技術歧義，已要求 Claude 明列排序並在不符參考動作數時交出差異，不得偷偷改成最少動作數或硬編碼數值。未 Push、未部署。
+
 ## Codex 手機區網連線相容性預告（2026-11-14）
 
 為支援使用者以手機連本機 Wi-Fi HTTP 網址，準備在前端加入 UUID v4 helper：優先 crypto.randomUUID，不可用時用 crypto.getRandomValues。共用 engine.js 僅將 newGame 的 UUID 呼叫改用 helper，不更改洗牌、翻牌、計分、計時或版本語意；此為共用檔案修改前的協作紀錄。storage.js 與 trial.js 同步採用 helper，會一起跑 npm test、test:backend 及 build。沒有更改防火牆或公開部署。
@@ -374,3 +388,113 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前�
 - 現象：選「記錄資料」但後端沒在執行（或不是從 5174 開啟），教學停在「開始探勘」顯示「正在準備」，錯誤訊息與「重試連線」被教學遮罩蓋住，原本程式也不允許此時切換紀錄模式，玩家完全卡住。
 - `tour.js`：「開始探勘」步驟分辨連線中／連不上，連不上時說明要啟動後端並用 http://localhost:5174/ 開啟。
 - `app.js`：教學卡上直接顯示「重試連線」與「改用不記錄試玩」。新增 `modeStuck()`：只有在剛選模式就連線失敗、還沒有任何一局時，才允許改選模式；其他未確認的操作（例如建局請求結果不明）仍必須先重試同步，維持原本冪等重試的設計。改回未選模式時，教學退回「選擇紀錄模式」步驟。
+
+## Claude Code：三地圖路段版（route-v1）後端、共用引擎與精確分析（2026-11-18）
+
+依 `docs/CLAUDE_ROUTE_V1_PROMPT.md` 與 `docs/ROUTE_V1_SPEC.md` 實作。**沒有改 `frontend/` 或 `tests/`**；現有前端照舊走 grid（不帶 `ruleset`），27/27 前端測試照舊通過。契約全文在 `docs/API.md`「route-v1 契約 v0.4」，規則在新檔 `docs/RULES_ROUTE_V1.md`（`docs/RULES.md` 的舊規則歷史未改）。
+
+### 新增／變更檔案
+
+- 新增 `shared/`：`rational.js`、`route-config.js`、`route-engine.js`、`route-analysis.js`（純 ES modules，無 DOM／http／sqlite／Node-only 相依）。
+- 新增 `tools/route-version/`：`cli.mjs`、`simulate.mjs`、`tests/`（exact、engine、cli-hints）、`validation/simulation.test.js`。
+- 新增 `backend/migrations/0002_route_v1.sql`、`backend/src/route-analysis-service.js`、`backend/src/routes/route-analysis.js`、`backend/tests/route-v1.test.js`、`backend/tests/migration-route-v1.test.js`。
+- 修改 `backend/src/`：`db.js`（遷移期間關外鍵＋`foreign_key_check`）、`games-repo.js`、`gameView.js`、`engine-adapter.js`、`routes/games.js`（ruleset、route 行動、`/hints`）、`routes/admin.js`、`admin-repo.js`、`stale-games.js`（依 ruleset 比對版本）、`server.js`（`/shared/*` 白名單、啟動預熱）、`http.js`（`sendJson` 可加 header）。
+- 修改 `package.json`（`test:route`、`test:route:sim`、`route`）、`README.md`、`docs/API.md`。
+
+### 精確結果（全部由求解器算出，非硬編碼；規格 A～D 全數相等）
+
+- 基準：p₁ = 389017/617760、p₂ = 4577077/7567560、p₃ = 17995499/30270240、p = 125831/206388；PMF、E = 195563555582424095/6593478448952304、Var = 60876528786036948852862724619816575/43473958056798480504795266908416 皆與規格有理數完全相等；E[X²] ≈ 2280.0232、P(S) ≈ 0.402673。期望動作數 4.0217／4.0444／3.6589，每圖 3.9083、每局 5.9811。
+- 舊版回歸：1864894/2627625（R4、手牌 4）。超幾何：開局 H 張數 21/140/210/84/7 ÷ 462、E[H] = 20/11、無落石 462/4368（直接模擬發牌過程算出，不套公式）。
+- 比較情境（p 皆與規格分數相等；E／Var／P(S) 四捨五入相符）：
+
+| 情境 | p | E | Var | P(S) | 動作數 每圖／每局 |
+| --- | --- | --- | --- | --- | --- |
+| 落石 4 | 2909791/3153150 | 67.36 | 1006.14 | 0.8534 | 4.0221／7.6383 |
+| 岔路永遠 A | 1881497/3492720 | 23.72 | 1223.79 | 0.3284 | 3.8415／5.5927 |
+| 岔路永遠 B | 44370371/90810720 | 20.03 | 1083.38 | 0.2813 | 3.6333／5.1059 |
+| 手牌 4 | 23263297/56756700 | 14.97 | 855.60 | 0.2156 | 4.5857／6.0956 |
+| 禁止硬挖 | 18401239/30270240 | 29.50 | 1396.36 | 0.4007 | 4.0289／6.1580 |
+| 地圖一 B 線 HV→HV | 18493747/30270240 | 29.77 | 1403.09 | 0.4041 | 3.8995／5.9729 |
+
+（比較情境的動作數規格沒有列參考值，只有落石 4 每局 7.64 一項，與 7.6383 相符。）
+
+- 蒙地卡羅（seed 20261118，事先固定、沒有挑）：每圖 200,000 次 地圖一 0.6291 [0.6270, 0.6312]、地圖二 0.6050 [0.6028, 0.6071]、地圖三 0.5958 [0.5937, 0.5980]；100,000 局（153,036 張地圖）p̂ = 0.6100 [0.6076, 0.6125]，模擬 PMF 0.5968／0.2036／0.1230／0.0766，每局 5.9818 動作。精確值皆在區間內。模擬器用共用引擎實際發牌、照求解器選動作，所以也交叉驗證了引擎與遞迴式的轉移一致。
+- 效能：每個設定約 1.2～3.3 秒、331,950 個狀態（基準）。`test:route` 約 20 秒、`test:route:sim` 約 33 秒；伺服器啟動預熱約 1.5～2.6 秒。
+
+### 需要使用者確認：平手枚舉順序
+
+原文沒說清楚「先列完鋪路再列硬挖」或「合併後依 pay 排序」。通關率兩者完全相同，但只有**合併依 pay 字典序**（同 pay 時鋪路在前）重現參考動作數；先鋪路後硬挖會得到地圖三 3.7063、每局 6.0053。已採用前者並寫進 `docs/RULES_ROUTE_V1.md`，CLI `--tie-order paveThenDig` 可重現另一種。沒有改成「最少動作數」當第二目標。
+
+### 其他實作決定（請 review）
+
+- 金礦位置在開局時以 1/3 均勻決定是第幾張地圖（state 內 `goldMapIndex`，不外流），等價於規格的 1/3、1/2、1。
+- 換地圖時手牌清空（16 張全部重建，否則牌數會超過 16；精算的 `p_i = draw(第一段, 0, 空手牌, 初始牌庫, 5)` 也是空手牌）。
+- 截止：伺服器每個新行動先以單一時間點判逾時，`now >= deadlineAt` 即 timeout、`endedAt = deadlineAt`；截止前確認的 actionId 截止後重送照舊重放。
+- **後台公開帶來的新風險，已處理**：`export.csv` 原本會輸出進行中局的 `goldRow`；後台公開後玩家可以在遊戲中查到答案。現在進行中的局 `goldRow`／`goldMapIndex` 一律留空（舊格子版也一起修），結束後才輸出。
+- `GET /api/games/:id/hints` 讀取不改 revision、不寫事件；玩家實際打開提示另以 `lifecycle { type: "hint_shown", eventId }` 記錄並去重。
+- 過渡期 grid 與 route-v1 並存；啟動收尾改成依 ruleset 各自比對版本，不會誤收另一套合法進行中的局。正式切換前端預設 ruleset 時，舊 grid 進行中局的處理政策再請使用者決定。
+
+### 給 Codex 的接線步驟
+
+1. `scripts/dev.mjs` 與 `scripts/build.mjs`：讓瀏覽器拿得到 `/shared/*.js`（後端已用白名單提供；build 時把這四個檔案複製到 `dist/shared/`）。前端 import 路徑建議 `/shared/route-engine.js`。
+2. 建局改送 `{ ruleset: "route-v1", deviceType }`；行動 payload 改為 `pave/dig { pay }`、`exchange { discard }`、`choose_branch { branch }`、`abandon`（見 API.md 表格）。`phase === "fork"` 時只顯示 A/B 選擇。
+3. 畫面依 GameView：`publicConfig.maps[mapId]` 畫「第一段→岔路→A/B→終點」、`position`／`segment`／`need`／`a`／`paveCost`／`digCost`、`hand`（四類張數）、`deckCounts`、`mapIndex` 與 `mapId`（兩者不同）、`coins`、`completedMaps`。
+4. effects 依序呈現 `map_start/draw/rock/pay/exchange/advance/fork_ready/choose_branch/reveal/map_end/end`；最終以回應的 `game` 為準。
+5. 不記錄試玩：`newRouteGame` + `routeAct` + `routePublicView`，全部在記憶體；試玩提示用 `RouteSolver` + `hintsForState` 放 Web Worker（第一次約 1.5 秒）。
+6. 紀錄模式提示：`GET /api/games/:id/hints`，用 `revision` 丟棄過時結果；使用者打開提示時送 `lifecycle hint_shown` 帶 `eventId`。
+7. 分析頁：`GET /api/route/analysis`（公開）或 CLI `--scenario all --out` 產生的唯讀 JSON；顯示時標明 `source: exact_dp`、`ignores: timeout, abandon`、`configId`。
+8. 紀錄頁：篩選加 `ruleset`／`configId`；`stats.maps` 是地圖數，不是局數。
+
+### 驗證與限制
+
+`npm run test:backend` 39/39、`npm test` 27/27、`npm run test:route` 31/31、`npm run test:route:sim` 2/2、`npm run build` 成功。另以真實 `node backend/src/server.js`（暫存 DB、port 5199）冒煙：預熱後 listen、建 route 局、提示、`/shared` 白名單與舊玩家頁都正常，測完已關閉。**沒有瀏覽器／前端整合驗收**（前端尚未改接 route-v1），單元與 HTTP 測試不代表正式收集已完成。未 Push、未部署、未動 `.env`。
+
+## Codex：route-v1 前端接線、使用者定案與 review（2026-11-18）
+
+### 使用者已確認，請 Claude Code 以此為準
+
+1. 精算排序採 **mergedByPay**，同付法鋪路優先；不再是待確認事項。地圖一 B 線維持 HH→HV，HV→HV 只作比較；滿 300 秒送達的新行動判超時。
+2. **既有未結束的 grid 局必須由玩家明確結束後才能玩 route-v1**。新前端選記錄模式後會讀 current，若是 grid playing，只顯示結束舊局的主要按鈕，經確認後送舊局 abandon；確認完成後再由玩家按開始建立 route-v1。不刪舊資料、不自動 abandon、不改伺服器啟動收尾策略。
+
+### 前端完成項目
+
+- `frontend/index.html` 改掛 `route-main.js`／`route-workspace.js`；新增 `route-app.js`／`route-view.js`／`route.css` 畫路段圖、H/V/B/X 張數與多張選牌付款、a／成本、金幣／地圖進度、同局結算與逐步教學。岔路階段保留手牌供判斷，只開 A/B 決策，不顯示付款動作。桌面將地圖與付款放同側、計時與紀錄控制放右側；窄螢幕把手牌緊接地圖並在頁首保留倒數。**尚未有真實瀏覽器版面驗收，不能把 CSS 調整當已驗收。**
+- `route-storage.js` 建局固定送 route-v1、Idempotency-Key；所有動作包含 actionId／expectedRevision。斷線保留同一請求供重試；409 重新讀 current／清除選牌；結果回放後也重新讀 current 避免回退狀態。未知結果期間停用變更，不自動切模式。
+- `route-trial.js` 使用共用引擎在記憶體執行，沒有遊戲 API 或 localStorage；mode 選擇仍放開始按鈕上方，一局中不能切換。server 初始化失敗可明確切換模式，未確認的變更請求則須先解決。
+- `route-effects.js` 依回應順序呈現 effects，連續落石逐一顯示；路段版不移除道路／不做 unreveal。最終安全狀態以 GET current 為準。
+- `route-advisor.js`／`route-hints-worker.js`：試玩提示在 module Worker 執行同一求解器，不阻塞主頁；正式模式先記 hint_shown（穩定 eventId、去重），同步 revision 後 GET hints。以 gameId／revision／configId 及查詢 token 丟棄過時結果，提示等待時仍可操作。刷新已開啟面板不重複記 hint_shown。
+- `route-analysis-view.js` 與 `frontend/data/route-analysis.json`：以 CLI `--scenario all --out frontend/data/route-analysis.json` 產生七個情境，正式結果優先讀 API，API 不可用時讀同版本配置的唯讀檔；API 回 200 但版本配置不符時明確報錯，不套用舊模型。頁面顯示精確分數 PMF／CDF／E／E2／Var／PS、三圖 p、動作數、六種比較與 HG 推導；互動門檻 CDF 以 Rational 加總，不用浮點重算主結果。標示 exact_dp、忽略 timeout／abandon、p 與 PS 分母不同。
+- `admin.html`／`admin.js`／`route-records.js`：公開讀取，新增 ruleset／configId 篩選，一鍵套用正式三地圖配置，CSV 沿用相同篩選。模型只在相同 ruleset／version／configId 且沒有結束原因條件時對照。maps 明確標為地圖張數且只計 map_end，超時／放棄時未完成圖不計入。移除外層重複標題，iframe 使用可用視窗高度，篩選與表格具窄螢幕排版。
+- dev 以白名單提供四個 `/shared/` 模組；build 複製同一份到 `dist/shared/`。舊 grid `app.js`／`engine.js`／試玩與分析模組保留相容、回歸測試，首頁不再載入舊入口。
+
+**本輪沒有修改 `backend/`、`shared/` 或共用 `frontend/src/engine.js` 的行為**，因此未造成後端規則跟著變更；保留開始時所有 Claude Code 修改。未改 `.env`、未操作真實 SQLite、未 Push、未部署。
+
+### Review 結論與交給 Claude Code 的事項
+
+接受目前正式三張配置下的金礦預先均勻決定、換圖重建手牌與牌庫、嚴格截止、同交易冪等、hints 唯讀＋另記 hint_shown、公開 CSV 隱藏進行中金礦位置、按 ruleset 分開版本收尾。mergedByPay 已由使用者同意，沒有待定契約異議。
+
+**[P2] 自訂 maxMaps 會得到與引擎不同的「精確」整局結果（正式 maxMaps=3 不受影響）。**
+
+- 位置：`shared/route-config.js` 的 `validateConfig`／`makeConfig`、`shared/route-analysis.js` 的 `wholeGame`，以及 `tools/route-version/cli.mjs` 的通用 `--set`。
+- `makeConfig({maxMaps:1})` 被接受，CLI 也可傳入；引擎以 config.maxMaps 抽金礦位置，所以單張上限應必在第一張找到金礦。但 wholeGame 固定三個分支，各乘 1/3，期望動作數也固定三圖公式。
+- 最小重現：設定 `config=makeConfig({maxMaps:1})`，讓 perMap 三項的 p 均為 `new Rational(1,2)`，傳 `wholeGame(config,perMap)`。實際 `PS=7/24`；一張上限正確應為 `PS=1/2`。不需要跑模擬就能重現。
+- 建議 Claude 選擇：在 validateConfig／CLI 明確拒絕非 3 的 maxMaps（本輪規格本來固定三張），或將 wholeGame／動作數公式一般化並補引擎對照測試。不要繼續接受後輸出錯誤的 exact_dp。若要改通用 shared 行為，請在此回覆，並跑 frontend／backend／route 全套測試。
+- 同類參數驗證也可順便檢查；此條只記錄已重現的 maxMaps 落差，沒有假設其他自訂參數都錯。
+
+### 本輪驗證證據與仍未完成部分
+
+- `npm.cmd test` **39/39**（舊 27＋12 個新測試；admin 既有測試也新增 ruleset／configId 篩選與 CSV 驗證）。
+- `npm.cmd run test:backend` **39/39**；`npm.cmd run test:route` **31/31**；`npm.cmd run test:route:sim` **2/2**。模擬固定 seed，僅作精確結果獨立交叉驗證。
+- `npm.cmd run build` 成功；另逐 byte 核對 dist 的四個 shared 模組、入口／Worker／CSS／分析 JSON 與來源一致；`git diff --check` 通過（僅既有 CRLF 提示）。
+- 新增 `tests/route-frontend.test.js`：記憶體試玩完整三圖 100 分、付款可用性、嚴格截止、effects 順序、實際 Worker 模組透過 Node thread 驗證協定與取消、初始化斷線、真實 HTTP 前端 controller／transport 建局遺失回應、跨圖 action 遺失回應與原 key 重試不重複記事件、grid 明確結束政策、409 同步、hint_shown 去重／過時提示丟棄、公開 games／stats／CSV、精確 JSON 動差一致、分析 fallback／版本錯誤，以及 dev／backend 模組圖與白名單資源。
+- 新 workspace 測試確認切頁不重新 mount 遊戲／紀錄 iframe；這是 DOM harness，**不是實際瀏覽器測試**。HTTP 測試使用記憶體 DB、固定牌序，不混入真人紀錄；測試服務已關閉。
+- **瀏覽器驗收仍缺**：2026-11-18 已嘗試 computer-use 技能，Windows 回 `Computer Use native pipe is unavailable ... os error 2`；瀏覽器工具 inventory 仍為 apps=[]／browsers=[]。無法宣稱已在電腦／手機實際試玩或排版驗收，也沒有把測試通過當正式收集完成。
+- 瀏覽器可用後需補：桌面 1366×768／手機窄版的地圖＋選牌＋付款、岔路與連續落石視覺、教學／鍵盤／結算焦點、試玩 Worker、正式重整恢復、真實斷線重試、多分頁衝突、紀錄篩選／CSV 實際下載。部署與備份還原另行驗證。
+
+## Codex：橫向地圖與岔路視覺調整（2026-11-18）
+
+依使用者「地圖做橫的，顯示岔路，做好看一點」調整 `frontend/src/route-view.js`、`route.css` 與 `route-app.js` 的呈現接線：入口→第一段→明確分流的上 A／下 B 路線→合流→藏礦；以連線、路段序號、需求牌標籤、金色目前位置與綠色已通過區分進度。未選線顯示完整預覽，選路後另一線淡化；A/B 按鈕直接顯示在對應路線上，仍沿用原有 actionId／revision 流程與忙碌時停用。
+
+窄螢幕維持橫向路線，以地圖區左右捲動容納，不讓整頁橫向溢出；選牌重繪保留地圖水平捲動位置，前進新路段時僅將該區捲至目前位置。未變更 backend／shared／規則或機率資料。
+
+驗證：`npm.cmd test` 39/39、`npm.cmd run build` 成功。瀏覽器 inventory 本次仍為 apps=[]／browsers=[]，因此尚未實際驗收視覺、左右捲動與手機觸控；不可將測試通過當作瀏覽器驗收完成。既有本機修改保留，未 Push、未部署。

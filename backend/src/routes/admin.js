@@ -10,7 +10,10 @@ import {
 } from '../session.js';
 import { verifyPassword } from '../password.js';
 import { checkRateLimit, recordAttempt, resetRateLimit } from '../ratelimit.js';
-import { listGames, gameStats, exportGameRows, exportEventRows } from '../admin-repo.js';
+import {
+  listGames, gameStats, exportGameRows, exportEventRows,
+  FILTER_KEYS, GAME_CSV_COLUMNS, EVENT_CSV_COLUMNS,
+} from '../admin-repo.js';
 import { toCsv } from '../csv.js';
 
 function requireAdmin(db, req) {
@@ -21,7 +24,7 @@ function requireAdmin(db, req) {
 
 function filtersFromQuery(query) {
   const filters = {};
-  for (const key of ['version', 'source', 'mode', 'status', 'reason']) {
+  for (const key of FILTER_KEYS) {
     const value = query.get(key);
     if (value) filters[key] = value;
   }
@@ -105,11 +108,7 @@ export function registerAdminRoutes(routes, db) {
       const filters = filtersFromQuery(getQuery(req));
       const rows = exportGameRows(db, filters);
 
-      const csv = toCsv([
-        'gameId', 'playerId', 'attempt', 'version', 'source', 'mode', 'status',
-        'reason', 'startedAt', 'endedAt', 'durationMs', 'turns', 'score', 'coins',
-        'goldRow', 'deviceType',
-      ], rows);
+      const csv = toCsv(GAME_CSV_COLUMNS, rows);
 
       sendText(res, 200, csv, 'text/csv; charset=utf-8');
     },
@@ -122,10 +121,7 @@ export function registerAdminRoutes(routes, db) {
       const filters = filtersFromQuery(getQuery(req));
       const rows = exportEventRows(db, filters);
 
-      const csv = toCsv([
-        'gameId', 'seq', 'turn', 'type', 'elapsedMs', 'decisionMs', 'cardId',
-        'row', 'col', 'removed', 'reward', 'handCount', 'deckCount', 'reason', 'score',
-      ], rows);
+      const csv = toCsv(EVENT_CSV_COLUMNS, rows);
 
       sendText(res, 200, csv, 'text/csv; charset=utf-8');
     },

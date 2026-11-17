@@ -6,14 +6,24 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openDb } from './db.js';
 import { sendJson } from './http.js';
 import { ApiError } from './errors.js';
-import { VERSION } from './engine-adapter.js';
 import { finalizeStaleVersionGames } from './stale-games.js';
+import { warmRouteAnalysis } from './route-analysis-service.js';
 import { registerPlayerRoutes } from './routes/players.js';
 import { registerGameRoutes } from './routes/games.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerRouteAnalysisRoutes } from './routes/route-analysis.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const frontendRoot = path.resolve(here, '..', '..', 'frontend');
+const sharedRoot = path.resolve(here, '..', '..', 'shared');
+
+// /shared/* 只提供這幾個純共用模組；不能順便暴露 backend、資料庫或環境檔。
+export const SHARED_MODULES = new Set([
+  'rational.js',
+  'route-config.js',
+  'route-engine.js',
+  'route-analysis.js',
+]);
 
 const staticTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -27,6 +37,7 @@ export function createServer(db) {
   registerPlayerRoutes(routes, db);
   registerGameRoutes(routes, db);
   registerAdminRoutes(routes, db);
+  registerRouteAnalysisRoutes(routes);
 
   return http.createServer(async (req, res) => {
     const pathname = new URL(req.url, 'http://internal').pathname;
@@ -36,8 +47,27 @@ export function createServer(db) {
       return;
     }
 
+    if (pathname.startsWith('/shared/')) {
+      await serveShared(res, pathname);
+      return;
+    }
+
     await serveStatic(req, res, pathname);
   });
+}
+
+async function serveShared(res, pathname) {
+  const name = pathname.slice('/shared/'.length);
+  if (!SHARED_MODULES.has(name)) {
+    res.writeHead(404).end('Not found');
+    return;
+  }
+  const body = await readFile(path.join(sharedRoot, name));
+  res.writeHead(200, {
+    'Content-Type': 'text/javascript; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end(body);
 }
 
 async function dispatchApi(routes, req, res, pathname) {
@@ -94,10 +124,15 @@ function main() {
   const db = openDb(dbPath);
   const port = Number(process.env.PORT || 5174);
 
-  const finalized = finalizeStaleVersionGames(db, VERSION, Date.now());
+  const finalized = finalizeStaleVersionGames(db, undefined, Date.now());
   if (finalized) {
     console.log(`Finalized ${finalized} in-progress game(s) left over from a previous rules version.`);
   }
+
+  // 開始 listen 前預熱正式設定的精確分析，之後提示查詢都是查表。
+  const t0 = performance.now();
+  const analysis = warmRouteAnalysis();
+  console.log(`route-v1 exact analysis ready (${analysis.configId}, ${Math.round(performance.now() - t0)} ms)`);
 
   createServer(db).listen(port, '0.0.0.0', () => {
     console.log(`Backend (+static frontend): http://localhost:${port}`);

@@ -1,0 +1,1418 @@
+{
+  "scenarios": [
+    {
+      "scenario": "base",
+      "ruleset": "route-v1",
+      "version": "0.4.0",
+      "source": "exact_dp",
+      "configId": "route-v1-8ef987f14181be86",
+      "config": {
+        "deck": {
+          "H": 4,
+          "V": 4,
+          "B": 2,
+          "X": 1,
+          "R": 5
+        },
+        "handLimit": 5,
+        "digBase": 3,
+        "allowDig": true,
+        "forceBranch": null,
+        "goldScore": 60,
+        "coinScore": 20,
+        "maxMaps": 3,
+        "timeLimitMs": 300000,
+        "maps": {
+          "1": {
+            "first": "HH",
+            "A": [
+              "B",
+              "HV",
+              "V"
+            ],
+            "B": [
+              "HH",
+              "HV"
+            ]
+          },
+          "2": {
+            "first": "HV",
+            "A": [
+              "B",
+              "HH",
+              "H"
+            ],
+            "B": [
+              "VV",
+              "H",
+              "H"
+            ]
+          },
+          "3": {
+            "first": "B",
+            "A": [
+              "HH",
+              "VV",
+              "V"
+            ],
+            "B": [
+              "VV",
+              "B",
+              "VV"
+            ]
+          }
+        },
+        "configId": "route-v1-8ef987f14181be86"
+      },
+      "tieOrder": "mergedByPay",
+      "ignores": [
+        "timeout",
+        "abandon"
+      ],
+      "perMap": [
+        {
+          "mapId": 1,
+          "p": {
+            "numerator": "389017",
+            "denominator": "617760",
+            "decimal": "0.629722"
+          },
+          "expectedActions": 4.0217
+        },
+        {
+          "mapId": 2,
+          "p": {
+            "numerator": "4577077",
+            "denominator": "7567560",
+            "decimal": "0.604829"
+          },
+          "expectedActions": 4.0444
+        },
+        {
+          "mapId": 3,
+          "p": {
+            "numerator": "17995499",
+            "denominator": "30270240",
+            "decimal": "0.594495"
+          },
+          "expectedActions": 3.6589
+        }
+      ],
+      "p": {
+        "numerator": "125831",
+        "denominator": "206388",
+        "decimal": "0.609682"
+      },
+      "pmf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "15753845906636293",
+            "denominator": "26373913795809216",
+            "decimal": "0.597327"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "125831",
+            "denominator": "619164",
+            "decimal": "0.203227"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "15833440561",
+            "denominator": "127788019632",
+            "decimal": "0.123904"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "1992337659231191",
+            "denominator": "26373913795809216",
+            "decimal": "0.075542"
+          }
+        }
+      ],
+      "cdf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "15753845906636293",
+            "denominator": "26373913795809216",
+            "decimal": "0.597327"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "21113744006074357",
+            "denominator": "26373913795809216",
+            "decimal": "0.800554"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "24381576136578025",
+            "denominator": "26373913795809216",
+            "decimal": "0.924458"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "1",
+            "denominator": "1",
+            "decimal": "1.000000"
+          }
+        }
+      ],
+      "E": {
+        "numerator": "195563555582424095",
+        "denominator": "6593478448952304",
+        "decimal": "29.660149"
+      },
+      "E2": {
+        "numerator": "3758320961594525975",
+        "denominator": "1648369612238076",
+        "decimal": "2280.023202"
+      },
+      "Var": {
+        "numerator": "60876528786036948852862724619816575",
+        "denominator": "43473958056798480504795266908416",
+        "decimal": "1400.298742"
+      },
+      "PS": {
+        "numerator": "10620067889172923",
+        "denominator": "26373913795809216",
+        "decimal": "0.402673"
+      },
+      "expectedActions": {
+        "perMapAverage": 3.9083,
+        "perGame": 5.9811
+      },
+      "stats": {
+        "states": 331950,
+        "cacheHits": 654212,
+        "cacheMisses": 331950,
+        "ms": 1415
+      }
+    },
+    {
+      "scenario": "rocks4",
+      "ruleset": "route-v1",
+      "version": "0.4.0",
+      "source": "exact_dp",
+      "configId": "route-v1-455f3870fe57885f",
+      "config": {
+        "deck": {
+          "H": 4,
+          "V": 4,
+          "B": 2,
+          "X": 1,
+          "R": 4
+        },
+        "handLimit": 5,
+        "digBase": 3,
+        "allowDig": true,
+        "forceBranch": null,
+        "goldScore": 60,
+        "coinScore": 20,
+        "maxMaps": 3,
+        "timeLimitMs": 300000,
+        "maps": {
+          "1": {
+            "first": "HH",
+            "A": [
+              "B",
+              "HV",
+              "V"
+            ],
+            "B": [
+              "HH",
+              "HV"
+            ]
+          },
+          "2": {
+            "first": "HV",
+            "A": [
+              "B",
+              "HH",
+              "H"
+            ],
+            "B": [
+              "VV",
+              "H",
+              "H"
+            ]
+          },
+          "3": {
+            "first": "B",
+            "A": [
+              "HH",
+              "VV",
+              "V"
+            ],
+            "B": [
+              "VV",
+              "B",
+              "VV"
+            ]
+          }
+        },
+        "configId": "route-v1-455f3870fe57885f"
+      },
+      "tieOrder": "mergedByPay",
+      "ignores": [
+        "timeout",
+        "abandon"
+      ],
+      "perMap": [
+        {
+          "mapId": 1,
+          "p": {
+            "numerator": "158021",
+            "denominator": "171990",
+            "decimal": "0.918780"
+          },
+          "expectedActions": 3.9509
+        },
+        {
+          "mapId": 2,
+          "p": {
+            "numerator": "1477877",
+            "denominator": "1576575",
+            "decimal": "0.937397"
+          },
+          "expectedActions": 4.1048
+        },
+        {
+          "mapId": 3,
+          "p": {
+            "numerator": "4314851",
+            "denominator": "4729725",
+            "decimal": "0.912284"
+          },
+          "expectedActions": 4.0107
+        }
+      ],
+      "p": {
+        "numerator": "2909791",
+        "denominator": "3153150",
+        "decimal": "0.922820"
+      },
+      "pmf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "13784818292584681679",
+            "denominator": "94049209271642625000",
+            "decimal": "0.146570"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "2909791",
+            "denominator": "9459450",
+            "decimal": "0.307607"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "8466883663681",
+            "denominator": "29827064767500",
+            "decimal": "0.283866"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "24636861882626000671",
+            "denominator": "94049209271642625000",
+            "decimal": "0.261957"
+          }
+        }
+      ],
+      "cdf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "13784818292584681679",
+            "denominator": "94049209271642625000",
+            "decimal": "0.146570"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "42714993164880879179",
+            "denominator": "94049209271642625000",
+            "decimal": "0.454177"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "69412347389016624329",
+            "denominator": "94049209271642625000",
+            "decimal": "0.738043"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "1",
+            "denominator": "1",
+            "decimal": "1.000000"
+          }
+        }
+      ],
+      "E": {
+        "numerator": "63352850185312315291",
+        "denominator": "940492092716426250",
+        "decimal": "67.361385"
+      },
+      "E2": {
+        "numerator": "104276063080199017334",
+        "denominator": "18809841854328525",
+        "decimal": "5543.696959"
+      },
+      "Var": {
+        "numerator": "889957012723695659397904800003138460319",
+        "denominator": "884525376462122909765696571689062500",
+        "decimal": "1006.140735"
+      },
+      "PS": {
+        "numerator": "80264390979057943321",
+        "denominator": "94049209271642625000",
+        "decimal": "0.853430"
+      },
+      "expectedActions": {
+        "perMapAverage": 4.0221,
+        "perGame": 7.6383
+      },
+      "stats": {
+        "states": 262174,
+        "cacheHits": 531673,
+        "cacheMisses": 262174,
+        "ms": 1135
+      }
+    },
+    {
+      "scenario": "forceA",
+      "ruleset": "route-v1",
+      "version": "0.4.0",
+      "source": "exact_dp",
+      "configId": "route-v1-5101c161717bcc5e",
+      "config": {
+        "deck": {
+          "H": 4,
+          "V": 4,
+          "B": 2,
+          "X": 1,
+          "R": 5
+        },
+        "handLimit": 5,
+        "digBase": 3,
+        "allowDig": true,
+        "forceBranch": "A",
+        "goldScore": 60,
+        "coinScore": 20,
+        "maxMaps": 3,
+        "timeLimitMs": 300000,
+        "maps": {
+          "1": {
+            "first": "HH",
+            "A": [
+              "B",
+              "HV",
+              "V"
+            ],
+            "B": [
+              "HH",
+              "HV"
+            ]
+          },
+          "2": {
+            "first": "HV",
+            "A": [
+              "B",
+              "HH",
+              "H"
+            ],
+            "B": [
+              "VV",
+              "H",
+              "H"
+            ]
+          },
+          "3": {
+            "first": "B",
+            "A": [
+              "HH",
+              "VV",
+              "V"
+            ],
+            "B": [
+              "VV",
+              "B",
+              "VV"
+            ]
+          }
+        },
+        "configId": "route-v1-5101c161717bcc5e"
+      },
+      "tieOrder": "mergedByPay",
+      "ignores": [
+        "timeout",
+        "abandon"
+      ],
+      "perMap": [
+        {
+          "mapId": 1,
+          "p": {
+            "numerator": "18059617",
+            "denominator": "30270240",
+            "decimal": "0.596613"
+          },
+          "expectedActions": 4.0757
+        },
+        {
+          "mapId": 2,
+          "p": {
+            "numerator": "3044221",
+            "denominator": "6054048",
+            "decimal": "0.502841"
+          },
+          "expectedActions": 3.9133
+        },
+        {
+          "mapId": 3,
+          "p": {
+            "numerator": "390955",
+            "denominator": "756756",
+            "decimal": "0.516620"
+          },
+          "expectedActions": 3.5356
+        }
+      ],
+      "p": {
+        "numerator": "1881497",
+        "denominator": "3492720",
+        "decimal": "0.538691"
+      },
+      "pmf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "85846596841723434247",
+            "denominator": "127824048292114944000",
+            "decimal": "0.671600"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "1881497",
+            "denominator": "10478160",
+            "decimal": "0.179564"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "3540030961009",
+            "denominator": "36597278995200",
+            "decimal": "0.096729"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "6660557633045550473",
+            "denominator": "127824048292114944000",
+            "decimal": "0.052107"
+          }
+        }
+      ],
+      "cdf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "85846596841723434247",
+            "denominator": "127824048292114944000",
+            "decimal": "0.671600"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "108799153720934039047",
+            "denominator": "127824048292114944000",
+            "decimal": "0.851163"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "121163490659069393527",
+            "denominator": "127824048292114944000",
+            "decimal": "0.947893"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "1",
+            "denominator": "1",
+            "decimal": "1.000000"
+          }
+        }
+      ],
+      "E": {
+        "numerator": "30323561311080196937",
+        "denominator": "1278240482921149440",
+        "decimal": "23.722892"
+      },
+      "E2": {
+        "numerator": "114183268749839975341",
+        "denominator": "63912024146057472",
+        "decimal": "1786.569433"
+      },
+      "Var": {
+        "numerator": "1999555161179377079187496714376814998831",
+        "denominator": "1633898732178493333207776450812313600",
+        "decimal": "1223.793814"
+      },
+      "PS": {
+        "numerator": "41977451450391509753",
+        "denominator": "127824048292114944000",
+        "decimal": "0.328400"
+      },
+      "expectedActions": {
+        "perMapAverage": 3.8415,
+        "perGame": 5.5927
+      },
+      "stats": {
+        "states": 241441,
+        "cacheHits": 458914,
+        "cacheMisses": 241441,
+        "ms": 969
+      }
+    },
+    {
+      "scenario": "forceB",
+      "ruleset": "route-v1",
+      "version": "0.4.0",
+      "source": "exact_dp",
+      "configId": "route-v1-77f6fe3b7be414bf",
+      "config": {
+        "deck": {
+          "H": 4,
+          "V": 4,
+          "B": 2,
+          "X": 1,
+          "R": 5
+        },
+        "handLimit": 5,
+        "digBase": 3,
+        "allowDig": true,
+        "forceBranch": "B",
+        "goldScore": 60,
+        "coinScore": 20,
+        "maxMaps": 3,
+        "timeLimitMs": 300000,
+        "maps": {
+          "1": {
+            "first": "HH",
+            "A": [
+              "B",
+              "HV",
+              "V"
+            ],
+            "B": [
+              "HH",
+              "HV"
+            ]
+          },
+          "2": {
+            "first": "HV",
+            "A": [
+              "B",
+              "HH",
+              "H"
+            ],
+            "B": [
+              "VV",
+              "H",
+              "H"
+            ]
+          },
+          "3": {
+            "first": "B",
+            "A": [
+              "HH",
+              "VV",
+              "V"
+            ],
+            "B": [
+              "VV",
+              "B",
+              "VV"
+            ]
+          }
+        },
+        "configId": "route-v1-77f6fe3b7be414bf"
+      },
+      "tieOrder": "mergedByPay",
+      "ignores": [
+        "timeout",
+        "abandon"
+      ],
+      "perMap": [
+        {
+          "mapId": 1,
+          "p": {
+            "numerator": "32435",
+            "denominator": "77616",
+            "decimal": "0.417891"
+          },
+          "expectedActions": 3.2807
+        },
+        {
+          "mapId": 2,
+          "p": {
+            "numerator": "5561737",
+            "denominator": "10090080",
+            "decimal": "0.551208"
+          },
+          "expectedActions": 3.9924
+        },
+        {
+          "mapId": 3,
+          "p": {
+            "numerator": "214793",
+            "denominator": "432432",
+            "decimal": "0.496709"
+          },
+          "expectedActions": 3.6268
+        }
+      ],
+      "p": {
+        "numerator": "44370371",
+        "denominator": "90810720",
+        "decimal": "0.488603"
+      },
+      "pmf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "1614596308699515169331269",
+            "denominator": "2246635472782212255744000",
+            "decimal": "0.718673"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "44370371",
+            "denominator": "272432160",
+            "decimal": "0.162868"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "1968729822677641",
+            "denominator": "24739760600755200",
+            "decimal": "0.079578"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "87353272630971144574811",
+            "denominator": "2246635472782212255744000",
+            "decimal": "0.038882"
+          }
+        }
+      ],
+      "cdf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "1614596308699515169331269",
+            "denominator": "2246635472782212255744000",
+            "decimal": "0.718673"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "1980500427468412204057669",
+            "denominator": "2246635472782212255744000",
+            "decimal": "0.881541"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "2159282200151241111169189",
+            "denominator": "2246635472782212255744000",
+            "decimal": "0.961118"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "1",
+            "denominator": "1",
+            "decimal": "1.000000"
+          }
+        }
+      ],
+      "E": {
+        "numerator": "449921162038572491099867",
+        "denominator": "22466354727822122557440",
+        "decimal": "20.026443"
+      },
+      "E2": {
+        "numerator": "1667495449523922888138439",
+        "denominator": "1123317736391106127872",
+        "decimal": "1484.437925"
+      },
+      "Var": {
+        "numerator": "546821833470533805984632149025620231301621305511",
+        "denominator": "504737094756335438538706831537211686099353600",
+        "decimal": "1083.379524"
+      },
+      "PS": {
+        "numerator": "632039164082697086412731",
+        "denominator": "2246635472782212255744000",
+        "decimal": "0.281327"
+      },
+      "expectedActions": {
+        "perMapAverage": 3.6333,
+        "perGame": 5.1059
+      },
+      "stats": {
+        "states": 221700,
+        "cacheHits": 416572,
+        "cacheMisses": 221700,
+        "ms": 845
+      }
+    },
+    {
+      "scenario": "hand4",
+      "ruleset": "route-v1",
+      "version": "0.4.0",
+      "source": "exact_dp",
+      "configId": "route-v1-9e6f816644184d11",
+      "config": {
+        "deck": {
+          "H": 4,
+          "V": 4,
+          "B": 2,
+          "X": 1,
+          "R": 5
+        },
+        "handLimit": 4,
+        "digBase": 3,
+        "allowDig": true,
+        "forceBranch": null,
+        "goldScore": 60,
+        "coinScore": 20,
+        "maxMaps": 3,
+        "timeLimitMs": 300000,
+        "maps": {
+          "1": {
+            "first": "HH",
+            "A": [
+              "B",
+              "HV",
+              "V"
+            ],
+            "B": [
+              "HH",
+              "HV"
+            ]
+          },
+          "2": {
+            "first": "HV",
+            "A": [
+              "B",
+              "HH",
+              "H"
+            ],
+            "B": [
+              "VV",
+              "H",
+              "H"
+            ]
+          },
+          "3": {
+            "first": "B",
+            "A": [
+              "HH",
+              "VV",
+              "V"
+            ],
+            "B": [
+              "VV",
+              "B",
+              "VV"
+            ]
+          }
+        },
+        "configId": "route-v1-9e6f816644184d11"
+      },
+      "tieOrder": "mergedByPay",
+      "ignores": [
+        "timeout",
+        "abandon"
+      ],
+      "perMap": [
+        {
+          "mapId": 1,
+          "p": {
+            "numerator": "12049151",
+            "denominator": "30270240",
+            "decimal": "0.398053"
+          },
+          "expectedActions": 4.717
+        },
+        {
+          "mapId": 2,
+          "p": {
+            "numerator": "31554461",
+            "denominator": "75675600",
+            "decimal": "0.416970"
+          },
+          "expectedActions": 4.6386
+        },
+        {
+          "mapId": 3,
+          "p": {
+            "numerator": "2324137",
+            "denominator": "5605600",
+            "decimal": "0.414610"
+          },
+          "expectedActions": 4.4015
+        }
+      ],
+      "p": {
+        "numerator": "23263297",
+        "denominator": "56756700",
+        "decimal": "0.409878"
+      },
+      "pmf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "430251093928144274420627",
+            "denominator": "548494988472219789000000",
+            "decimal": "0.784421"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "23263297",
+            "denominator": "170270100",
+            "decimal": "0.136626"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "541180987310209",
+            "denominator": "9663968984670000",
+            "decimal": "0.056000"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "12589654038550623099073",
+            "denominator": "548494988472219789000000",
+            "decimal": "0.022953"
+          }
+        }
+      ],
+      "cdf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "430251093928144274420627",
+            "denominator": "548494988472219789000000",
+            "decimal": "0.784421"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "505189687491199826750627",
+            "denominator": "548494988472219789000000",
+            "decimal": "0.921047"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "535905334433669165900927",
+            "denominator": "548494988472219789000000",
+            "decimal": "0.977047"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "1",
+            "denominator": "1",
+            "decimal": "1.000000"
+          }
+        }
+      ],
+      "E": {
+        "numerator": "82125327730359425817313",
+        "denominator": "5484949884722197890000",
+        "decimal": "14.972849"
+      },
+      "E2": {
+        "numerator": "11845112352886199798813",
+        "denominator": "10969899769444395780",
+        "decimal": "1079.783098"
+      },
+      "Var": {
+        "numerator": "25740354362423379020900732643359455434234460031",
+        "denominator": "30084675237914051922482659312320452100000000",
+        "decimal": "855.596883"
+      },
+      "PS": {
+        "numerator": "118243894544075514579373",
+        "denominator": "548494988472219789000000",
+        "decimal": "0.215579"
+      },
+      "expectedActions": {
+        "perMapAverage": 4.5857,
+        "perGame": 6.0956
+      },
+      "stats": {
+        "states": 351633,
+        "cacheHits": 665732,
+        "cacheMisses": 351633,
+        "ms": 1517
+      }
+    },
+    {
+      "scenario": "noDig",
+      "ruleset": "route-v1",
+      "version": "0.4.0",
+      "source": "exact_dp",
+      "configId": "route-v1-c2b9196e81b7ec27",
+      "config": {
+        "deck": {
+          "H": 4,
+          "V": 4,
+          "B": 2,
+          "X": 1,
+          "R": 5
+        },
+        "handLimit": 5,
+        "digBase": 3,
+        "allowDig": false,
+        "forceBranch": null,
+        "goldScore": 60,
+        "coinScore": 20,
+        "maxMaps": 3,
+        "timeLimitMs": 300000,
+        "maps": {
+          "1": {
+            "first": "HH",
+            "A": [
+              "B",
+              "HV",
+              "V"
+            ],
+            "B": [
+              "HH",
+              "HV"
+            ]
+          },
+          "2": {
+            "first": "HV",
+            "A": [
+              "B",
+              "HH",
+              "H"
+            ],
+            "B": [
+              "VV",
+              "H",
+              "H"
+            ]
+          },
+          "3": {
+            "first": "B",
+            "A": [
+              "HH",
+              "VV",
+              "V"
+            ],
+            "B": [
+              "VV",
+              "B",
+              "VV"
+            ]
+          }
+        },
+        "configId": "route-v1-c2b9196e81b7ec27"
+      },
+      "tieOrder": "mergedByPay",
+      "ignores": [
+        "timeout",
+        "abandon"
+      ],
+      "perMap": [
+        {
+          "mapId": 1,
+          "p": {
+            "numerator": "727619",
+            "denominator": "1164240",
+            "decimal": "0.624973"
+          },
+          "expectedActions": 4.2708
+        },
+        {
+          "mapId": 2,
+          "p": {
+            "numerator": "2288471",
+            "denominator": "3783780",
+            "decimal": "0.604811"
+          },
+          "expectedActions": 4.0275
+        },
+        {
+          "mapId": 3,
+          "p": {
+            "numerator": "73379",
+            "denominator": "123552",
+            "decimal": "0.593912"
+          },
+          "expectedActions": 3.7885
+        }
+      ],
+      "p": {
+        "numerator": "18401239",
+        "denominator": "30270240",
+        "decimal": "0.607899"
+      },
+      "pmf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "49867462037554913391641",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.599306"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "18401239",
+            "denominator": "90810720",
+            "decimal": "0.202633"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "338605596735121",
+            "denominator": "2748862288972800",
+            "decimal": "0.123180"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "6230762512260581214919",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.074881"
+          }
+        }
+      ],
+      "cdf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "49867462037554913391641",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.599306"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "66728286023380099158041",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.801939"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "76977958701895428257081",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.925119"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "1",
+            "denominator": "1",
+            "decimal": "1.000000"
+          }
+        }
+      ],
+      "E": {
+        "numerator": "24546995046567955953991",
+        "denominator": "832087212141560094720",
+        "decimal": "29.500508"
+      },
+      "E2": {
+        "numerator": "94302248307037293571043",
+        "denominator": "41604360607078004736",
+        "decimal": "2266.643374"
+      },
+      "Var": {
+        "numerator": "966798932033444569709907918629260055675031119",
+        "denominator": "692369128609513633112080701697135371878400",
+        "decimal": "1396.363431"
+      },
+      "PS": {
+        "numerator": "33341259176601096080359",
+        "denominator": "83208721214156009472000",
+        "decimal": "0.400694"
+      },
+      "expectedActions": {
+        "perMapAverage": 4.0289,
+        "perGame": 6.158
+      },
+      "stats": {
+        "states": 226694,
+        "cacheHits": 389914,
+        "cacheMisses": 226694,
+        "ms": 900
+      }
+    },
+    {
+      "scenario": "map1BHVHV",
+      "ruleset": "route-v1",
+      "version": "0.4.0",
+      "source": "exact_dp",
+      "configId": "route-v1-d63eb7bd91c12b40",
+      "config": {
+        "deck": {
+          "H": 4,
+          "V": 4,
+          "B": 2,
+          "X": 1,
+          "R": 5
+        },
+        "handLimit": 5,
+        "digBase": 3,
+        "allowDig": true,
+        "forceBranch": null,
+        "goldScore": 60,
+        "coinScore": 20,
+        "maxMaps": 3,
+        "timeLimitMs": 300000,
+        "maps": {
+          "1": {
+            "first": "HH",
+            "A": [
+              "B",
+              "HV",
+              "V"
+            ],
+            "B": [
+              "HV",
+              "HV"
+            ]
+          },
+          "2": {
+            "first": "HV",
+            "A": [
+              "B",
+              "HH",
+              "H"
+            ],
+            "B": [
+              "VV",
+              "H",
+              "H"
+            ]
+          },
+          "3": {
+            "first": "B",
+            "A": [
+              "HH",
+              "VV",
+              "V"
+            ],
+            "B": [
+              "VV",
+              "B",
+              "VV"
+            ]
+          }
+        },
+        "configId": "route-v1-d63eb7bd91c12b40"
+      },
+      "tieOrder": "mergedByPay",
+      "ignores": [
+        "timeout",
+        "abandon"
+      ],
+      "perMap": [
+        {
+          "mapId": 1,
+          "p": {
+            "numerator": "1065413",
+            "denominator": "1681680",
+            "decimal": "0.633541"
+          },
+          "expectedActions": 3.9951
+        },
+        {
+          "mapId": 2,
+          "p": {
+            "numerator": "4577077",
+            "denominator": "7567560",
+            "decimal": "0.604829"
+          },
+          "expectedActions": 4.0444
+        },
+        {
+          "mapId": 3,
+          "p": {
+            "numerator": "17995499",
+            "denominator": "30270240",
+            "decimal": "0.594495"
+          },
+          "expectedActions": 3.6589
+        }
+      ],
+      "p": {
+        "numerator": "18493747",
+        "denominator": "30270240",
+        "decimal": "0.610955"
+      },
+      "pmf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "49584938938162034868917",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.595910"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "18493747",
+            "denominator": "90810720",
+            "decimal": "0.203652"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "342018678100009",
+            "denominator": "2748862288972800",
+            "decimal": "0.124422"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "6325206902056007143723",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.076016"
+          }
+        }
+      ],
+      "cdf": [
+        {
+          "score": 0,
+          "prob": {
+            "numerator": "49584938938162034868917",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.595910"
+          }
+        },
+        {
+          "score": 60,
+          "prob": {
+            "numerator": "66530526841529985896117",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.799562"
+          }
+        },
+        {
+          "score": 80,
+          "prob": {
+            "numerator": "76883514312100002328277",
+            "denominator": "83208721214156009472000",
+            "decimal": "0.923984"
+          }
+        },
+        {
+          "score": 100,
+          "prob": {
+            "numerator": "1",
+            "denominator": "1",
+            "decimal": "1.000000"
+          }
+        }
+      ],
+      "E": {
+        "numerator": "24774949620532790905771",
+        "denominator": "832087212141560094720",
+        "decimal": "29.774463"
+      },
+      "E2": {
+        "numerator": "95257652642166400150487",
+        "denominator": "41604360607078004736",
+        "decimal": "2289.607417"
+      },
+      "Var": {
+        "numerator": "971455363743449237345275592207654956881468359",
+        "denominator": "692369128609513633112080701697135371878400",
+        "decimal": "1403.088791"
+      },
+      "PS": {
+        "numerator": "33623782275993974603083",
+        "denominator": "83208721214156009472000",
+        "decimal": "0.404090"
+      },
+      "expectedActions": {
+        "perMapAverage": 3.8995,
+        "perGame": 5.9729
+      },
+      "stats": {
+        "states": 333909,
+        "cacheHits": 659286,
+        "cacheMisses": 333909,
+        "ms": 1489
+      }
+    }
+  ]
+}

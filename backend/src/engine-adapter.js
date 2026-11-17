@@ -20,3 +20,17 @@ export {
   abandon,
   recordLifecycle,
 } from '../../frontend/src/engine.js';
+
+// 三地圖路段版（route-v1）：共用模組在專案根 shared/，前後端同一份。
+export {
+  RULESET as ROUTE_RULESET,
+  ROUTE_VERSION,
+  newRouteGame,
+  routeAct,
+  routeCheckTimeout,
+  routeAbandon,
+  routeRecordLifecycle,
+  routePublicView,
+  solverState,
+} from '../../shared/route-engine.js';
+export { makeConfig as makeRouteConfig } from '../../shared/route-config.js';

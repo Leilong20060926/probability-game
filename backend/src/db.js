@@ -40,9 +40,16 @@ export function migrate(db) {
 
     const sql = readFileSync(join(migrationsDir, name), 'utf8');
 
+    // SQLite 重建資料表的建議程序：外鍵檢查在交易外關閉，COMMIT 前用
+    // foreign_key_check 確認沒有孤兒列，再恢復外鍵檢查。
+    db.exec('PRAGMA foreign_keys = OFF;');
     db.exec('BEGIN');
     try {
       db.exec(sql);
+      const orphans = db.prepare('PRAGMA foreign_key_check').all();
+      if (orphans.length) {
+        throw new Error(`migration ${name} 留下 ${orphans.length} 筆外鍵不一致的資料`);
+      }
       db.prepare(
         'INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)',
       ).run(name, Date.now());
@@ -50,6 +57,8 @@ export function migrate(db) {
     } catch (err) {
       db.exec('ROLLBACK');
       throw err;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON;');
     }
   }
 }

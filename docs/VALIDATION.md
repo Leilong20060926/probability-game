@@ -115,3 +115,24 @@
 | 鍵盤與手機版面 | Tab／Enter 可選牌與落子、規則可用 Escape 關閉、對話框焦點不逸出；窄螢幕棋盤與手牌可操作且不遮擋。 |
 
 此表是待執行驗收清單，並非已通過紀錄；本機瀏覽器測試即使完成，也不代表後端整合完成。
+
+## route-v1 前端接線驗證（2026-11-18，最新）
+
+首頁已改為三地圖路段版。先前本文件的 grid／localStorage／admin 登入敘述均屬歷史，當前契約見 API.md v0.4 與 RULES_ROUTE_V1.md。使用者已確認 mergedByPay、舊 grid 局須明確結束才開 route。
+
+| 檢查 | 結果 |
+| --- | --- |
+| npm.cmd test | 39/39；含新 route 前端 controller、付款、試玩、Worker、分析與真實 HTTP 整合 |
+| npm.cmd run test:backend | 39/39 |
+| npm.cmd run test:route | 31/31；精確有理數與規格 A～D 比對 |
+| npm.cmd run test:route:sim | 2/2；每圖 200,000 次與 100,000 局，僅作交叉驗證 |
+| npm.cmd run build | 成功；dist/shared 四模組與入口／Worker／CSS／分析 JSON 逐 byte 相同 |
+| git diff --check | 通過，僅既有換行格式提示 |
+| 真實 HTTP | 使用前端 transport/controller，完整 coin→coin→gold=100；建局／跨圖行動遺失回應後原識別碼重試、409 同步、舊 grid 明確 abandon、提示事件與舊 revision 丟棄、匿名 stats／CSV、dev/backend 資源與 shared 白名單通過 |
+| 實際瀏覽器／手機 | **未完成**；Windows native pipe 找不到（os error 2），瀏覽器工具 apps=[]／browsers=[] |
+
+分析檔由 `node tools/route-version/cli.mjs --scenario all --out frontend/data/route-analysis.json` 重算，七情境使用 exact_dp；JSON／頁面主結果不以模擬替代。記憶體試玩不呼叫遊戲 API、不寫 localStorage；HTTP 測試使用記憶體 SQLite，未動真實 .env 或資料庫，測完服務已關閉。未 Push、未部署，沒有宣稱資料已上傳／備份。
+
+Review 已重現 CLI 自訂 maxMaps 與固定三張整局公式不一致（P2，正式配置不受影響），交 Claude 處理，詳見 HANDOFF 最後一節。本輪沒有修改 backend／shared／舊 engine 規則。
+
+待實際驗收：1366×768 與窄螢幕地圖／手牌／付款同時操作、手機倒數與教學、連續落石、A/B 選線、鍵盤與結算焦點、Worker 提示、正式重整恢復、斷線／多分頁、紀錄篩選及下載 CSV。這些不能由 DOM harness、Node Worker 或 HTTP 通過取代。

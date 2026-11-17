@@ -169,4 +169,132 @@ gameId、seq（局內唯一遞增）、turn、type、elapsedMs、decisionMs（pl
 
 規則版本與進行中舊局（2026-11-14 定案）：
 
-`frontend/src/engine.js` 的 `VERSION` 每次規則有實質變更（像同回合撤銷翻牌這種會改變分數／事件語意的變更）就要 bump；每局建立時的 `version` 欄位凍結，之後不會被改寫，統計／CSV 可以直接用 `version` 篩選區分不同規則下的資料。伺服器啟動時會呼叫 `backend/src/stale-games.js` 的 `finalizeStaleVersionGames`，把 `status=playing` 但 `version` 不是目前版本的局收掉（已逾時判 `timeout`，否則判 `abandoned`），避免舊局用新規則的程式碼繼續跑完剩下的回合。這個機制是通用的，每次 `VERSION` 再變動都會自動套用，不需要每次另外寫一次性遷移。
+`frontend/src/engine.js` 的 `VERSION` 每次規則有實質變更（像同回合撤銷翻牌這種會改變分數／事件語意的變更）就要 bump；每局建立時的 `version` 欄位凍結，之後不會被改寫，統計／CSV 可以直接用 `version` 篩選區分不同規則下的資料。伺服器啟動時會呼叫 `backend/src/stale-games.js` 的 `finalizeStaleVersionGames`，把 `status=playing` 但 `version` 不是目前版本的局收掉（已逾時判 `timeout`，否則判 `abandoned`），避免舊局用新規則的程式碼繼續跑完剩下的回合。這個機制是通用的，每次 `VERSION` 再變動都會自動套用，不需要每次另外寫一次性遷移。（2026-11-18 起改為依 ruleset 分別比對，見下方 route-v1 段落。）
+
+## route-v1 契約 v0.4（三地圖路段版，Claude Code 實作，2026-11-18）
+
+**已實作並有測試**（`backend/tests/route-v1.test.js`、`migration-route-v1.test.js`），不是草案。規則見 `docs/RULES_ROUTE_V1.md`。舊格子版 API 完全保留：不帶 `ruleset` 時一律是 `grid`，現有前端不需改就能繼續用。
+
+### 共用模組（前端可直接 import）
+
+| 檔案 | 主要 exports |
+| --- | --- |
+| `shared/route-config.js` | `RULESET`、`ROUTE_VERSION`、`SEGMENTS`、`BASE_CONFIG`、`SCENARIOS`、`makeConfig(patch)`、`scenarioConfig(name)`、`publicConfig(config)` |
+| `shared/route-engine.js` | `newRouteGame({playerId, attempt, rng, now, config})`、`routeAct(game, action, now, rng)` → `{ok}` 或 `{ok:false, code, message}`、`routeCheckTimeout`、`routeAbandon`、`routeRecordLifecycle`、`routePublicView(game)`、`solverState(game)`、`phaseOf`、`deckCountsOf` |
+| `shared/route-analysis.js` | `RouteSolver`、`analyze`、`serializeAnalysis`、`hintsForState(solver, state)`、`legalActions`、`canPave`、`wholeGame`、`initialDealDistribution`、`DEFAULT_TIE_ORDER` |
+| `shared/rational.js` | `Rational`（BigInt，`toJSON()` → `{numerator, denominator, decimal}`） |
+
+後端以 `GET /shared/<檔名>` 提供**只有上面四個檔案**（白名單；`..`、其他檔名一律 404）。不記錄試玩請直接用 `newRouteGame` + `routeAct` + `routePublicView` 在記憶體跑，不呼叫遊戲 API。試玩提示：`new RouteSolver(makeConfig())` 第一次查詢約 1.5 秒，建議放 Web Worker。
+
+### 建局
+
+`POST /api/games { "ruleset": "route-v1", "deviceType": "pointer" }`（`Idempotency-Key` 照舊）。設定由伺服器決定（正式 `configId` 固定），body 裡的 `config`、分數等欄位一律忽略；冪等雜湊包含 `deviceType`、`ruleset`、伺服器選定的 `configId`。`ruleset` 只接受 `grid`／`route-v1`，其他回 400。已有進行中的局（不論哪種 ruleset）照舊 409 `GAME_IN_PROGRESS` 附該局 view。
+
+### route-v1 GameView（實際回應）
+
+```json
+{
+  "id": "…", "playerId": "…", "attempt": 1, "revision": 0,
+  "ruleset": "route-v1", "version": "0.4.0", "configId": "route-v1-8ef987f14181be86",
+  "publicConfig": { "configId": "…", "deck": {"H":4,"V":4,"B":2,"X":1,"R":5}, "handLimit": 5, "digBase": 3,
+                    "allowDig": true, "goldScore": 60, "coinScore": 20, "maxMaps": 3, "timeLimitMs": 300000,
+                    "maps": { "1": {"first":"HH","A":["B","HV","V"],"B":["HH","HV"]}, "2": {}, "3": {} },
+                    "segments": { "HH": {"H":2,"V":0,"B":0} } },
+  "mode": "server", "source": "human", "status": "playing",
+  "mapIndex": 1, "mapId": 2, "phase": "segment",
+  "position": { "kind": "first", "index": 0 }, "branch": null, "segment": "HV",
+  "need": { "H": 1, "V": 1, "B": 0 }, "a": 2, "paveCost": 4, "digCost": 5,
+  "hand": { "H": 2, "V": 3, "B": 0, "X": 0 },
+  "deckCounts": { "H": 2, "V": 1, "B": 2, "X": 1, "R": 3 }, "deckRemaining": 9,
+  "coins": 0, "turn": 0, "mapActionCount": 0, "completedMaps": [],
+  "startedAt": 0, "deadlineAt": 300000, "serverNow": 4, "endedAt": null, "score": 0, "reason": null
+}
+```
+
+（以上是本機伺服器實際回應，maps／segments 與時間戳為版面省略；時間為 epoch 毫秒。）
+
+- `phase`：`segment`（可 pave／dig／exchange）、`fork`（只能 choose_branch）、`finished`。
+- `position.kind`：`first`、`fork`、`A`、`B`、`end`；`index` 是該線第幾段（0 起）。`segment` 是目前路段代號（岔路／結束時為 null）。
+- `completedMaps`：`[{ mapIndex, mapId, branch, result: "coin"|"gold"|"fail" }]`，只含已發生的地圖。
+- 永遠不含：牌庫順序、金礦在哪一張（`goldMapIndex`）、未來地圖、RNG 狀態。`deckCounts` 只有數量。
+
+### 行動
+
+`POST /api/games/:id/actions`，`actionId`、`expectedRevision` 照舊：
+
+| type | body | 說明 |
+| --- | --- | --- |
+| `pave` | `"pay": {"H":1,"V":1,"B":0,"X":0}` | 省略的鍵視為 0；`R` 或其他鍵 → 400 |
+| `dig` | `"pay": {...}`，總數剛好 `digCost` | |
+| `exchange` | `"discard": "H"／"V"／"B"／"X"` | 牌庫空 → 422 |
+| `choose_branch` | `"branch": "A"／"B"` | 不加 turn，但 revision+1、有事件、要冪等 |
+| `abandon` | — | |
+
+- 形狀錯（缺 pay、負數、非整數、R、未知 type、在 route 局送 `place`）→ **400**；規則上不合法（付錯、付不起、在岔路付牌、在路段選岔路）→ **422 `INVALID_ACTION`**。兩者都不消耗牌、turn、revision，也不寫事件。
+- 自動補牌、連續落石、翻終點、抽新地圖、發新手牌都在同一個行動內完成並同交易寫入；重送同 `actionId` 重放原回應，**不會重抽地圖或牌**。
+- 逾時：見 RULES_ROUTE_V1「時間」；到期後的新行動拿到 409 `REVISION_CONFLICT` 與已結束（`reason: timeout`）的最新 game。
+
+### effects（依序，前端只做呈現）
+
+每個 effect 都帶當下的 `mapIndex, mapId, pos, branch, a`（`pos` 是精簡代碼：`F` 第一段、`K` 岔路、`A0`／`B1`…、`E` 終點）。另加：
+
+| type | 欄位 | 何時 |
+| --- | --- | --- |
+| `map_start` | — | 新地圖開始（開局、金幣後） |
+| `draw` | `card`（H/V/B/X） | 實際抽到道路牌 |
+| `rock` | `card: "R"` | 抽到落石；該 effect 的 `a` 已是加 1 後的值，加在當下 `pos` |
+| `pay` | `action`（pave/dig）、`pay`、`segment` | 付款；`pos`／`a` 是付款前 |
+| `exchange` | `discard` | 換牌 |
+| `advance` | — | 前進到新位置（`a` 已歸零） |
+| `fork_ready` | — | 到岔路且補牌完成，可以選路 |
+| `choose_branch` | `choice` | 選 A/B |
+| `reveal` | `reward`（coin/gold） | 翻終點（末段不補牌，`pay` 後直接接 `reveal`） |
+| `map_end` | `result`（coin/gold/fail） | 一張地圖結束 |
+| `abandon`、`end` | `end`：`reason, score` | |
+
+沒有 `removed`、沒有 `unreveal`（那是舊格子版）。
+
+### 提示與分析
+
+- `GET /api/games/:id/hints`（需玩家 session、只能看自己的局，`no-store`）：
+  ```json
+  { "gameId": "…", "revision": 0, "ruleset": "route-v1", "version": "0.4.0", "configId": "…",
+    "status": "playing", "mapIndex": 1, "mapId": 2, "pos": "F", "a": 2,
+    "source": "exact_dp", "tieOrder": "mergedByPay", "ignores": ["timeout","abandon"],
+    "semantics": "做完這個動作後、其餘採最佳策略時，這一張地圖的通關率；不含時間，不是整局金礦機率。",
+    "options": [ { "action": {"type":"pave","pay":{"H":2,"V":2,"B":0,"X":0}},
+                   "value": {"numerator":"1859","denominator":"2520","decimal":"0.737698"},
+                   "expectedActions": 3.7377, "tieRank": 1, "best": true } ] }
+  ```
+  `tieRank` 是固定平手順序中的位置，`best` 恰好一個。岔路時 options 是 `choose_branch` A/B。前端請以 `revision` 丟棄過時提示。讀取本身不改 revision／turn、不寫事件、不暫停時間（已到期時會像 GET current 一樣結算 timeout）。已結束的局回 `options: []`。
+- 玩家實際打開提示的紀錄：`POST /api/games/:id/lifecycle { "type": "hint_shown", "eventId": "…" }`（route 局才接受；以 eventId 去重，不算 turn）。
+- `GET /api/route/analysis`（公開、無 session、`Cache-Control: public, max-age=300`）：正式設定的完整精確分析，格式同 CLI JSON。伺服器啟動時預熱，所以提示與分析都是查表，不在請求路徑上長時間計算；非正式設定的提示回 503 `ANALYSIS_NOT_READY`。
+- 本輪沒有網頁參數編輯或配置寫入 API；比較情境用 CLI，網頁只讀取顯示。
+
+### CLI 與分析 JSON
+
+```sh
+npm run route -- --scenario base --format json        # 等同 node tools/route-version/cli.mjs …
+npm run route -- --scenario all --format text
+npm run route -- --set deck.R=4 --set handLimit=4      # 任意參數；maps.1.B=HV,HV、forceBranch=A、allowDig=false
+npm run route -- --scenario base --simulate 100000 --map-runs 200000 --seed 20261118
+npm run route -- --scenario all --out analysis.json    # 產生前端可載入的唯讀檔
+```
+
+JSON：`ruleset, version, source: "exact_dp", configId, config（完整快照）, tieOrder, ignores, perMap[{mapId, p, expectedActions}], p, pmf[{score, prob}], cdf[{score, prob}], E, E2, Var, PS, expectedActions{perMapAverage, perGame}, stats{states, cacheHits, cacheMisses, ms}`。所有機率／動差為 `{numerator, denominator, decimal}`（字串），動作數為浮點。`--simulate` 另附 `simulation`（`source: "monte_carlo"`，seed、局數、95% 區間、模擬 PMF），與精確結果分開標示。
+
+### 持久化、統計與 CSV
+
+- 遷移 `0002_route_v1.sql`：`games` 依 SQLite 建議程序重建，`gold_row` 改可為 NULL（不拿來存新意義），新增 `ruleset`（舊資料標 `grid`）、`config_id`、`gold_map_index`、`map_index`、`map_sequence`、`config_json`；`events` 新增 `map_index, map_id, pos, branch, a, action, segment, pay_h..pay_x, hand_h..hand_x（動作前）, deck_h..deck_r（動作前）, result`。舊資料全數保留，已用檔案 DB 測試。
+- 所有 admin 端點新增篩選 `ruleset`、`configId`（原有 `version/source/mode/status/reason` 照舊），仍公開讀取（使用者 2026-11-14 決定）。
+- `stats` 新增 `maps: { played, passed, passRate, byMapId }`：地圖是局內進度，與 `games` 局數分開；理論對照值是單張地圖 p≈0.6097、整局 P(S)≈0.4027，不要互相比較。
+- `export.csv` 欄位：`gameId, playerId, attempt, ruleset, version, configId, source, mode, status, reason, startedAt, endedAt, durationMs, turns, score, coins, goldRow, goldMapIndex, mapIndex, mapSequence, deviceType`。**進行中的局 `goldRow`／`goldMapIndex` 留空**（後台公開後，否則玩家能在遊戲中查到答案）。
+- `events.csv` 欄位：在舊欄位前加 `ruleset, version, configId`，之後加 `mapIndex, mapId, pos, branch, a, action, segment, payH, payV, payB, payX, handH, handV, handB, handX, deckH, deckV, deckB, deckX, deckR, result`。route 事件的 `cardId` 是抽到的牌種（draw H/V/B/X、rock R）或換牌棄掉的牌種；`handCount`／`deckCount` 是動作前張數。
+- 版本收尾：啟動時依 ruleset 分別比對目前版本（grid 0.3.1、route-v1 0.4.0），只收掉自己 ruleset 的舊版進行中局。
+
+### 前端接線與使用者確認（2026-11-18）
+
+- 首頁預設送 `ruleset: route-v1`。玩家選記錄模式後，若 GET current 是進行中的 grid 局，先顯示明確結束按鈕與確認；以舊局 id、actionId、expectedRevision 送 abandon，確認完成後才允許建 route 局。不自動刪除、結束或續玩舊 grid。
+- 使用者已確認 mergedByPay 為正式精算平手順序。正式設定維持三張上限、地圖一 B 線 HH→HV、嚴格 300 秒截止。
+- 新前端每個變更請求都帶去重識別碼；回應遺失時重試沿用原請求。重放的 game 可能落後其他變更，故每次確認後再 GET current；revision 衝突會清除選牌並同步，不切回試玩。
+- 開提示先送帶 eventId 的 hint_shown、GET current 取得新 revision，再讀 hints；畫面只接受目前 gameId／revision／configId 相符的結果。刷新已打開的提示不重複記開啟事件。

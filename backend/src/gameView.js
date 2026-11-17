@@ -1,9 +1,20 @@
-import { CONFIG, deckCounts } from './engine-adapter.js';
+import { CONFIG, deckCounts, routePublicView } from './engine-adapter.js';
 import { clock } from './clock.js';
 
-// 安全序列化：絕不包含 deck、goldRow；未揭曉終點只給 {row, revealed:false}，
-// 即使遊戲已結束也一樣——保留不確定性，見 docs/API.md 的「安全狀態」定案。
+const isRoute = record => record.ruleset === 'route-v1';
+
+// 安全序列化：絕不包含牌庫順序、金礦位置（goldRow / goldMapIndex）、script。
+// 舊格子版未揭曉終點只給 {row, revealed:false}，即使遊戲已結束也一樣。
 export function toSafeGameView(record) {
+  if (isRoute(record)) {
+    return {
+      ...routePublicView(record),
+      revision: record.revision,
+      mode: 'server',
+      serverNow: clock.now(),
+    };
+  }
+
   const board = Object.entries(record.board).map(([k, cardId]) => {
     const [row, col] = k.split(',').map(Number);
     return { row, col, cardId };
@@ -19,6 +30,7 @@ export function toSafeGameView(record) {
     id: record.id,
     playerId: record.playerId,
     attempt: record.attempt,
+    ruleset: 'grid',
     version: record.version,
     revision: record.revision,
     mode: 'server',
@@ -41,7 +53,7 @@ export function toSafeGameView(record) {
   };
 }
 
-const FIELDS_BY_TYPE = {
+const GRID_FIELDS = {
   place: ['cardId', 'position'],
   discard: ['cardId', 'position'],
   draw: ['cardId'],
@@ -54,13 +66,37 @@ const FIELDS_BY_TYPE = {
   restored: [],
 };
 
-// 只取白名單欄位，過濾 handBefore/deckBefore/elapsedMs 等內部記錄欄位。
+// 路段版：每個 effect 都帶發生當下的 mapIndex/mapId/pos/a，前端依序呈現即可，
+// 不需要（也不能）自己重跑亂數。不含 handBefore/deckBefore/decisionMs 等紀錄欄位。
+const ROUTE_COMMON = ['mapIndex', 'mapId', 'pos', 'branch', 'a'];
+const ROUTE_FIELDS = {
+  map_start: [],
+  draw: ['card'],
+  rock: ['card'],
+  pay: ['action', 'pay', 'segment'],
+  exchange: ['discard'],
+  advance: [],
+  fork_ready: [],
+  choose_branch: ['choice'],
+  reveal: ['reward'],
+  map_end: ['result'],
+  abandon: [],
+  end: ['reason', 'score'],
+  hidden: [],
+  visible: [],
+  restored: [],
+  hint_shown: [],
+};
+
 export function toSafeEffect(event) {
-  const fields = FIELDS_BY_TYPE[event.type] || [];
+  const routeEvent = event.mapIndex != null;
+  const fields = routeEvent
+    ? [...ROUTE_COMMON, ...(ROUTE_FIELDS[event.type] || [])]
+    : GRID_FIELDS[event.type] || [];
   const effect = { type: event.type };
 
   for (const field of fields) {
-    effect[field] = event[field];
+    effect[field] = event[field] && typeof event[field] === 'object' ? structuredClone(event[field]) : event[field];
   }
 
   return effect;
