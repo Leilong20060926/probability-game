@@ -204,7 +204,7 @@ test('route hints: lifecycle is recorded once, stale response cannot overwrite a
 
 test('exact analysis artifact: PMF, CDF, expectation and variance remain rational and version matched',async()=>{
   const {scenarios}=await bundle(),base=validateExact(scenarios.find(row=>row.scenario==='base'));
-  assert.equal(scenarios.length,7);assert.equal(base.tieOrder,'mergedByPay');assert.equal(base.source,'exact_dp');
+  assert.equal(scenarios.length,8);assert.equal(base.config.maxRockCost,3);assert.equal(base.tieOrder,'mergedByPay');assert.equal(base.source,'exact_dp');
   const q=value=>new Rational(value.numerator,value.denominator);
   const mean=base.pmf.reduce((sum,row)=>sum.add(q(row.prob).mul(row.score)),new Rational(0));
   const second=base.pmf.reduce((sum,row)=>sum.add(q(row.prob).mul(row.score**2)),new Rational(0));

@@ -94,7 +94,7 @@ test('route-v1: full three-map HTTP game (coin → coin → gold = 100) with saf
   const { close, db, client, game } = await setup();
   try {
     assert.equal(game.ruleset, 'route-v1');
-    assert.equal(game.version, '0.4.0');
+    assert.equal(game.version, '0.5.0');
     assert.equal(game.phase, 'segment');
     assert.equal(game.mapIndex, 1);
     assert.ok([1, 2, 3].includes(game.mapId));
@@ -403,7 +403,7 @@ test('route-v1: /api/route/analysis is public and exact; /shared serves only the
     const res = await client.get('/api/route/analysis');
     assert.equal(res.status, 200);
     assert.match(res.headers.get('cache-control'), /public/);
-    assert.deepEqual(res.body.p, { numerator: '125831', denominator: '206388', decimal: '0.609682' });
+    assert.deepEqual(res.body.p, { numerator: '5780251', denominator: '7567560', decimal: '0.763820' });
     assert.equal(res.body.source, 'exact_dp');
     assert.equal(res.body.configId, makeConfig().configId);
 

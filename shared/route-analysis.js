@@ -2,7 +2,7 @@
 // 期望動作數依同一最佳策略與固定平手規則遞迴，用浮點數（規格允許 ±0.01）。
 
 import { Rational, ZERO, ONE } from './rational.js';
-import { SEGMENTS, ROUTE_VERSION, RULESET } from './route-config.js';
+import { SEGMENTS, ROUTE_VERSION, RULESET, addRock } from './route-config.js';
 
 const H = 0, V = 1, B = 2, X = 3, R = 4;
 // mergedByPay 是預設：只有它重現規格的參考動作數（地圖三 3.6589；paveThenDig 會得到 3.7063）。
@@ -120,7 +120,7 @@ export class RouteSolver {
       const d2 = deck.slice(); d2[t]--;
       let child;
       if (t === R) {
-        child = this.draw(mapId, pos, a + 1, hand, d2, n);
+        child = this.draw(mapId, pos, addRock(this.config, a), hand, d2, n);
       } else {
         const h2 = hand.slice(); h2[t]++;
         child = this.draw(mapId, pos, a, h2, d2, n - 1);

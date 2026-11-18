@@ -72,7 +72,7 @@ const ROUTE_COMMON = ['mapIndex', 'mapId', 'pos', 'branch', 'a'];
 const ROUTE_FIELDS = {
   map_start: [],
   draw: ['card'],
-  rock: ['card'],
+  rock: ['card', 'capped'],
   pay: ['action', 'pay', 'segment'],
   exchange: ['discard'],
   advance: [],

@@ -5,7 +5,7 @@ export function routeEffectText(effect) {
   switch(effect.type) {
     case 'map_start':return `第 ${effect.mapIndex} 張探勘：抽到地圖${effect.mapId}，重新洗牌。`;
     case 'draw':return `補到${names[effect.card]||effect.card}牌。`;
-    case 'rock':return `抽到落石！${location}累積加付 ${effect.a} 張任意牌。`;
+    case 'rock':return effect.capped?`抽到落石！${location}加付已達上限 ${effect.a} 張，這張不再增加。`:`抽到落石！${location}累積加付 ${effect.a} 張任意牌。`;
     case 'pay':return `${effect.action==='dig'?'硬挖':'鋪路'}：交出${payText(effect.pay)}。`;
     case 'exchange':return `換牌：棄掉${names[effect.discard]||effect.discard}。`;
     case 'advance':return '前進一段，補牌中。';

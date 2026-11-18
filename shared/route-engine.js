@@ -2,7 +2,7 @@
 // 隱藏資訊（deck 順序、goldMapIndex、script）只存在 state，絕不經 routePublicView 外流。
 
 import {
-  RULESET, ROUTE_VERSION, ROAD_TYPES, DECK_TYPES, SEGMENTS, makeConfig, publicConfig,
+  RULESET, ROUTE_VERSION, ROAD_TYPES, DECK_TYPES, SEGMENTS, makeConfig, publicConfig, addRock,
 } from './route-config.js';
 import { legalActions, canPave, posToObject } from './route-analysis.js';
 
@@ -96,14 +96,15 @@ function freshDeck(game, rng) {
   return shuffle(DECK_TYPES.flatMap(t => Array(d[t]).fill(t)), rng);
 }
 
-// 抽到 n 張道路牌或牌庫空為止；每張落石讓「目前位置」a+1。
+// 抽到 n 張道路牌或牌庫空為止；每張落石讓「目前位置」a+1（最多到 maxRockCost，超過的落石只移出、capped=true）。
 function drawRoads(game, n, now) {
   let got = 0;
   while (got < n && game.deck.length) {
     const t = game.deck.shift();
     if (t === 'R') {
-      game.a++;
-      record(game, 'rock', { card: 'R' }, now);
+      const before = game.a;
+      game.a = addRock(game.config, game.a);
+      record(game, 'rock', { card: 'R', capped: game.a === before }, now);
     } else {
       game.hand[t]++;
       got++;

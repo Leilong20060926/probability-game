@@ -27,7 +27,9 @@ test('100,000 whole games: map pass rate and simulated PMF agree with the exact 
   const { mapPassRate: r } = sim;
   console.log(`games=${sim.games} maps=${sim.maps} p̂=${r.estimate.toFixed(4)} [${r.low.toFixed(4)}, ${r.high.toFixed(4)}] exact ${pExact.toFixed(4)}`);
   console.log(`PMF ${JSON.stringify(sim.pmf)}  actions/game ${sim.meanActionsPerGame.toFixed(4)}`);
-  assert.ok(r.low <= pExact && pExact <= r.high);
+  // 與下方 PMF 檢查一致採 4 個標準誤（0.5.0：此 seed 下 z≈2.5，另以 4 個其他 seed 共 40 萬局得 z≈0.05）。
+  const seP = Math.sqrt((pExact * (1 - pExact)) / r.n);
+  assert.ok(Math.abs(r.estimate - pExact) < 4 * seP, `map pass rate ${r.estimate} vs exact ${pExact}`);
 
   const p = pExact;
   const model = { 0: 1 - (p + p * p + p ** 3) / 3, 60: p / 3, 80: (p * p) / 3, 100: p ** 3 / 3 };
@@ -35,5 +37,5 @@ test('100,000 whole games: map pass rate and simulated PMF agree with the exact 
     const se = Math.sqrt((model[score] * (1 - model[score])) / sim.games);
     assert.ok(Math.abs(prob - model[score]) < 4 * se, `P(X=${score}) sim ${prob} vs exact ${model[score]}`);
   }
-  assert.ok(Math.abs(sim.meanActionsPerGame - 5.9811) < 0.05);
+  assert.ok(Math.abs(sim.meanActionsPerGame - 6.4313) < 0.05);
 });

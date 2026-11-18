@@ -9,7 +9,7 @@ import {payText,routeEffectText,playRouteEffects} from './route-effects.js';
 
 const tutorial=[
   ['三地圖探勘','每張地圖都有第一段與 A/B 岔路。找到金幣會重新抽圖、重洗牌；找到金礦才結算分數。','.route-map'],
-  ['路段與落石','看目前路段需要哪些方向牌。落石讓這一段多付任意牌；通過路段後歸零，新抽的落石加在新位置。','.route-map'],
+  ['路段與落石','看目前路段需要哪些方向牌。落石讓這一段多付任意牌，每段最多多付 3 張；通過路段後歸零，新抽的落石加在新位置。','.route-map'],
   ['選牌付款','點手牌或「＋」選取，點「−」取消。十字能代替一張方向牌；選好後再按鋪路或硬挖。','.route-hand'],
   ['三種動作','鋪路付需求＋落石成本；硬挖付任意 3＋落石成本。換牌則選一張，棄掉再抽一張，牌庫須有牌。','.route-hand'],
   ['補完牌再選路','到岔路先補完牌，再選 A 或 B。選路不算動作，累積的落石成本會帶進所選線第一段。','.route-map'],
@@ -74,7 +74,7 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
   function start() {
     if(!mode || !connected || busy || pending || active())return;
     const req=routeCreateRequest(globalThis.matchMedia?.('(pointer: coarse)').matches?'touch':'pointer');
-    return run(async()=>{await request(req.path,req.options);await current();notice=game?.a?`開局抽到 ${game.a} 張落石，第一段另付 ${game.a} 張。`:'選牌後，按鋪路、硬挖或換牌。';});
+    return run(async()=>{await request(req.path,req.options);await current();notice=game?.a?`開局抽到落石，第一段另付 ${game.a} 張（每段最多 3 張）。`:'選牌後，按鋪路、硬挖或換牌。';});
   }
   function submit(action) {
     if(!playable() && !(active() && !isRoute() && action.type==='abandon' && !busy && !pending && connected))return;

@@ -1,12 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800&display=swap');
 
 :root {
-  font-family: 'Noto Sans TC', sans-serif;
-  color: #243c36;
-  background: #f4f2eb;
-  font-synthesis: none;
-  --green: #153e36;
+  /* ===== 配色主題：要調色只改這裡 ===== */
+  --page-bg: #2E2725;      /* 淺灰：整頁背景 */
+  --game-bg: #1F1D1D;      /* 深灰：遊戲區域（地圖、側欄、手牌、視窗） */
+  --game-bg-2: #3b3b3b;    /* 深灰（較亮）：格子、卡片、按鈕 */
+  --game-line: #555;       /* 遊戲區框線 */
+  --cream: #D1CEC5;        /* 米白：遊戲區主要字色、主要按鈕底色 */
+  --cream-muted: #c9c1aa;  /* 米白（較暗）：次要說明字 */
+  --page-text: #F0E7D3;    /* 淺灰背景上的字（米白在淺灰上看不清楚） */
+  --gray: #696865;
   --gold: #bb8d38;
+
+  font-family: 'Noto Sans TC', sans-serif;
+  color: var(--page-text);
+  background: var(--page-bg);
+  font-synthesis: none;
 }
 
 .admin-page { padding-bottom: 40px; }
@@ -16,17 +25,17 @@
 .table-scroll { overflow: auto; }
 .expedition-actions { grid-column: 1 / -1; margin-top: auto; }
 .expedition-actions .primary { margin-top: 0; }
-.recording-panel { margin-bottom: 14px; padding: 14px; border: 1px solid #d0d5c3; border-radius: 8px; background: #f4f5ec; }
+.recording-panel { margin-bottom: 14px; padding: 14px; border: 1px solid var(--game-line); border-radius: 8px; background: var(--game-bg-2); color: var(--cream); }
 .recording-panel h2 { font-size: 14px; }
 .recording-panel p { font-size: 11px; line-height: 1.8; }
-.recording-panel button { padding: 10px; border: 1px solid #758b5a; border-radius: 6px; background: #e9eddf; color: #153e36; font-size: 12px; min-height: 44px; }
+.recording-panel button { padding: 10px; border: 1px solid var(--cream-muted); border-radius: 6px; background: #4a4a4a; color: var(--cream); font-size: 12px; min-height: 44px; }
 .mode-options { display: flex; gap: 8px; flex-wrap: wrap; }
 .mode-options button { flex: 1; }
 .cell.rock-hit { border: 3px solid #f2b665; }
 .cell.rock-hit::after { content: '🪨'; position: absolute; inset: 0; display: grid; place-items: center; background: #542f23b8; font-size: clamp(24px,4vw,48px); }
-.workspace-nav { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 5vw; border-bottom: 1px solid #d0d5c3; background: #fbfaf6; }
-.workspace-nav button { padding: 12px 18px; border: 1px solid #758b5a; border-radius: 6px; background: transparent; color: #153e36; }
-.workspace-nav button[aria-pressed="true"] { background: #153e36; color: #fff; }
+.workspace-nav { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 5vw; border-bottom: 1px solid #bdbdbd; background: var(--page-bg); }
+.workspace-nav button { padding: 12px 18px; border: 1px solid #6b6b6b; border-radius: 6px; background: transparent; color: var(--page-text); }
+.workspace-nav button[aria-pressed="true"] { background: var(--game-bg); color: var(--cream); }
 .workspace-view { max-width: 1320px; margin: auto; padding: 24px; }
 .workspace-view iframe { width: 100%; min-height: 900px; border: 0; background: #f4f2eb; }
 .workspace-view > section { margin: 32px 0; }
@@ -35,7 +44,7 @@
 .model-charts { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,320px),1fr)); gap: 20px; }
 .model-charts figure { margin: 16px 0; }
 .probability-chart { display: block; width: 100%; height: auto; }
-.probability-chart text { fill: #243c36; font-size: 13px; font-family: sans-serif; }
+.probability-chart text { fill: #5C4E47; font-size: 13px; font-family: sans-serif; }
 .analysis-table { border-collapse: collapse; width: 100%; margin: 18px 0; }
 .analysis-table td, .analysis-table th { text-align: left; padding: 12px; border-bottom: 1px solid #d0d5c3; }
 .workspace-view input, .workspace-view select { padding: 10px; font: inherit; max-width: 100%; }
@@ -44,7 +53,7 @@
 .admin-page th, .admin-page td { text-align: left; padding: 12px; border-bottom: 1px solid #d0d5c3; }
 
 * { box-sizing: border-box; }
-body { margin: 0; }
+body { margin: 0; background: var(--page-bg); }
 
 button, a {
   -webkit-tap-highlight-color: transparent;
@@ -74,7 +83,8 @@ a {
   align-items: center;
   justify-content: space-between;
   padding: 0 5vw;
-  border-bottom: 1px solid #dcded4;
+  border-bottom: 1px solid #bdbdbd;
+  background: var(--page-bg);
 }
 
 .brand {
@@ -89,7 +99,7 @@ a {
 .brand-mark {
   display: grid;
   place-items: center;
-  background: var(--green);
+  background: var(--game-bg);
   color: #e6c477;
   width: 45px;
   height: 45px;
@@ -113,18 +123,23 @@ a {
 
 .edition {
   font-size: 12px;
-  color: #7c8579;
+  color: #5e5e5e;
 }
 
 .text-button {
   background: transparent;
   border: 0;
-  color: var(--green);
+  color: var(--page-text);
   padding: 12px 0;
   font-size: 13px;
 }
 
 .text-button span { padding-left: 15px; }
+
+/* 深色區域（側欄、手牌、視窗）裡的文字按鈕用米白 */
+.expedition-panel .text-button,
+.hand-panel .text-button,
+.dialog .text-button { color: var(--cream); }
 
 main {
   max-width: 1320px;
@@ -143,9 +158,14 @@ main {
   font-size: 10px;
   letter-spacing: 2px;
   font-weight: 700;
-  color: #849078;
+  color: #5e5e5e;
   margin: 0 0 12px;
 }
+
+/* 深色遊戲區裡的小標題用較暗的米白 */
+.mine-panel .eyebrow,
+.expedition-panel .eyebrow,
+.hand-panel .eyebrow { color: var(--cream-muted); }
 
 h1 {
   font-size: 31px;
@@ -156,13 +176,13 @@ h1 {
 
 .subtitle {
   font-size: 13px;
-  color: #7a8278;
+  color: #5e5e5e;
   margin: 0;
 }
 
 .player-chip {
-  background: #eaece2;
-  border: 1px solid #d9dfcf;
+  background: #c8c8c8;
+  border: 1px solid #b5b5b5;
   border-radius: 9px;
   font-size: 12px;
   padding: 12px 17px;
@@ -171,7 +191,7 @@ h1 {
 .player-chip small {
   display: block;
   margin: 5px 0 0 17px;
-  color: #7a8477;
+  color: #555;
   font-size: 10px;
 }
 
@@ -191,8 +211,8 @@ h1 {
 }
 
 .mine-panel {
-  background: #162f2d;
-  color: #e3e7d8;
+  background: var(--game-bg);
+  color: var(--cream);
   padding: 25px 30px 18px;
   border-radius: 16px;
   position: relative;
@@ -208,7 +228,7 @@ h1 {
 }
 
 .panel-top .eyebrow {
-  color: #91a89b;
+  color: var(--cream-muted);
   font-size: 9px;
 }
 
@@ -220,14 +240,14 @@ h2 {
 
 h2 span {
   font-size: 11px;
-  color: #8f9c88;
+  color: var(--cream-muted);
   margin-left: 12px;
   font-weight: 400;
 }
 
 .compass {
   text-align: center;
-  color: #a3ad91;
+  color: var(--cream-muted);
   font-size: 10px;
   line-height: 1.8;
 }
@@ -239,7 +259,7 @@ h2 span {
   text-align: center;
   font-size: 9px;
   letter-spacing: 2px;
-  color: #78928b;
+  color: var(--cream-muted);
   margin-bottom: 10px;
 }
 
@@ -251,10 +271,10 @@ h2 span {
 
 .cell {
   aspect-ratio: 1;
-  border: 1px solid #3c5550;
-  background: #203b36;
+  border: 1px solid var(--game-line);
+  background: var(--game-bg-2);
   border-radius: 10px;
-  color: #3f5b51;
+  color: var(--cream-muted);
   padding: 0;
   position: relative;
   overflow: hidden;
@@ -264,13 +284,13 @@ h2 span {
 .cell-mark {
   font-size: 20px;
   font-weight: 300;
-  color: #466156;
+  color: #777;
 }
 
 .cell.entrance {
-  background: #bfd0b1;
-  color: #274a37;
-  border-color: #bfd0b1;
+  background: var(--cream);
+  color: #2f2f2f;
+  border-color: var(--cream);
 }
 
 .mine-icon {
@@ -285,9 +305,9 @@ h2 span {
 }
 
 .cell.target {
-  background: #334637;
+  background: #46443c;
   border: 1px solid #6b7150;
-  color: #c6b57b;
+  color: #e2cf8f;
 }
 
 .target-symbol {
@@ -312,9 +332,14 @@ h2 span {
   border-color: #ead69d;
 }
 
+/* 同時有兩種狀態的格子：維持目前畫面的顏色 */
+.cell.target.revealed { background: #46443c; color: #e2cf8f; }   /* 已翻開的終點：終點底色＋金色框 */
+.cell.occupied.revealed { color: var(--cream-muted); border-color: #8a8a8a; }
+.cell.entrance.revealed { background: var(--cream); border-color: var(--cream); color: #2f2f2f; }
+
 .cell.occupied {
-  color: #627d68;
-  border-color: #81917a;
+  color: var(--cream-muted);
+  border-color: #8a8a8a;
 }
 
 .cell .road-art {
@@ -327,6 +352,7 @@ h2 span {
 }
 
 .cell.legal {
+  /* 可以放牌的格子：目前是綠色系，想配合灰色主題可改這三個顏色 */
   border: 2px dashed #c3d69e;
   background: #4e6347;
   color: #d4e0b2;
@@ -342,7 +368,7 @@ h2 span {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  color: #9bafa0;
+  color: var(--cream-muted);
   font-size: 10px;
   margin-top: 20px;
   line-height: 1.6;
@@ -358,8 +384,9 @@ h2 span {
 }
 
 .expedition-panel {
-  border: 1px solid #dbddd0;
-  background: #fbfaf6;
+  border: 1px solid var(--game-line);
+  background: var(--game-bg);
+  color: var(--cream);
   border-radius: 16px;
   padding: 27px 24px;
   display: flex;
@@ -373,21 +400,21 @@ h2 span {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #6e7b68;
+  color: var(--cream-muted);
 }
 
 .section-label span {
   font-size: 10px;
   letter-spacing: 0;
   font-weight: 400;
-  background: #e9eddf;
+  background: var(--game-bg-2);
   padding: 4px 8px;
   border-radius: 20px;
 }
 
 .timer-label {
   font-size: 11px;
-  color: #7c8576;
+  color: var(--cream-muted);
   margin-top: 28px;
 }
 
@@ -395,22 +422,22 @@ h2 span {
   font-family: ui-monospace, monospace;
   font-size: 49px;
   letter-spacing: -2px;
-  color: #244539;
+  color: var(--cream);
   margin: 6px 0 12px;
 }
 
 .timer span {
   font-size: 12px;
-  color: #9b9f90;
+  color: var(--cream-muted);
   letter-spacing: 0;
   margin-left: 12px;
 }
 
-.timer.urgent { color: #a64a30; }
+.timer.urgent { color: #ff9b73; }
 
 .time-track {
   height: 4px;
-  background: #e6e8dc;
+  background: var(--game-bg-2);
   border-radius: 5px;
   overflow: hidden;
 }
@@ -430,7 +457,7 @@ h2 span {
 
 .stats div > span {
   display: block;
-  color: #858c7b;
+  color: var(--cream-muted);
   font-size: 11px;
   margin-bottom: 8px;
 }
@@ -438,11 +465,12 @@ h2 span {
 .stats strong {
   font-size: 27px;
   font-weight: 500;
+  color: var(--cream);
 }
 
 .stats small {
   font-size: 11px;
-  color: #8d937e;
+  color: var(--cream-muted);
   font-weight: 400;
 }
 
@@ -451,7 +479,7 @@ h2 span {
 .mission-note {
   display: flex;
   gap: 12px;
-  border-top: 1px solid #e3e5d9;
+  border-top: 1px solid var(--game-line);
   padding-top: 20px;
   margin-bottom: 20px;
 }
@@ -464,18 +492,19 @@ h2 span {
 .mission-note strong {
   font-size: 11px;
   font-weight: 500;
+  color: var(--cream);
 }
 
 .mission-note p {
   font-size: 10px;
   line-height: 1.9;
-  color: #8a8d7c;
+  color: var(--cream-muted);
   margin: 7px 0 0;
 }
 
 .primary {
-  background: var(--green);
-  color: #f7f4df;
+  background: var(--cream);
+  color: #2f2f2f;
   border: 0;
   border-radius: 8px;
   padding: 15px 19px;
@@ -488,11 +517,11 @@ h2 span {
   margin-top: auto;
 }
 
-.primary:hover { background: #285747; }
+.primary:hover { background: #fffaf0; }
 
 .save-note {
   font-size: 9px;
-  color: #89917e;
+  color: var(--cream-muted);
   text-align: center;
   line-height: 1.8;
   margin: 14px 0 0;
@@ -502,10 +531,11 @@ h2 span {
 
 .hand-panel {
   margin-top: 24px;
-  border: 1px solid #dcdfd1;
+  border: 1px solid var(--game-line);
   border-radius: 14px;
   padding: 24px 28px 0;
-  background: #f9f8f2;
+  background: var(--game-bg);
+  color: var(--cream);
 }
 
 .hand-heading {
@@ -522,7 +552,7 @@ h2 span {
 
 .hand-heading p:not(.eyebrow) {
   font-size: 11px;
-  color: #8b927e;
+  color: var(--cream-muted);
 }
 
 .hand-row {
@@ -535,11 +565,11 @@ h2 span {
   flex: 1;
   max-width: 125px;
   min-width: 0;
-  border: 1px solid #d0d5c3;
+  border: 1px solid var(--game-line);
   border-radius: 9px;
   padding: 8px 12px 10px;
-  background: #f0f0e4;
-  color: #7c9272;
+  background: var(--game-bg-2);
+  color: var(--cream);
   position: relative;
   transition: transform .15s, border-color .15s;
 }
@@ -548,12 +578,12 @@ h2 span {
 
 .hand-card:not(:disabled):hover {
   transform: translateY(-4px);
-  border-color: #758b5a;
+  border-color: var(--cream-muted);
 }
 
 .hand-card.selected {
-  border: 2px solid #446b41;
-  background: #e1e8d2;
+  border: 2px solid var(--cream);
+  background: #4d4b42;
   transform: translateY(-5px);
   padding: 7px 11px 9px;
   box-shadow: 0 5px 0 #42633f16;
@@ -563,7 +593,7 @@ h2 span {
   display: block;
   text-align: left;
   font: 9px ui-monospace, monospace;
-  color: #939b84;
+  color: var(--cream-muted);
   margin-bottom: 6px;
 }
 
@@ -573,7 +603,7 @@ h2 span {
   aspect-ratio: 1;
   object-fit: contain;
   border-radius: 8px;
-  background: #2b3a34;
+  background: #262626;
   pointer-events: none;
   user-select: none;
 }
@@ -583,12 +613,12 @@ h2 span {
   font-size: 11px;
   text-align: center;
   margin-top: 8px;
-  color: #46553e;
+  color: var(--cream);
 }
 
 .hand-card small {
   font-size: 8px;
-  color: #8a947b;
+  color: var(--cream-muted);
   display: block;
   margin-top: 5px;
 }
@@ -597,21 +627,21 @@ h2 span {
   margin-left: auto;
   align-self: center;
   padding: 15px 0 15px 22px;
-  border-left: 1px solid #dedfce;
+  border-left: 1px solid var(--game-line);
   max-width: 185px;
 }
 
 .discard-area > span {
   display: block;
-  color: #858c77;
+  color: var(--cream-muted);
   font-size: 11px;
 }
 
 .discard-area button {
   background: transparent;
-  border: 1px solid #acb69a;
+  border: 1px solid var(--cream-muted);
   border-radius: 6px;
-  color: #455f3b;
+  color: var(--cream);
   padding: 10px 12px;
   margin: 10px 0;
   font-size: 11px;
@@ -623,23 +653,23 @@ h2 span {
   display: block;
   font-size: 9px;
   line-height: 1.8;
-  color: #929580;
+  color: var(--cream-muted);
 }
 
 .notice {
-  border-top: 1px solid #e0e3d4;
+  border-top: 1px solid var(--game-line);
   margin: 20px 0 0;
   padding: 14px 0;
   font-size: 11px;
   line-height: 1.8;
-  color: #768267;
+  color: var(--cream-muted);
   min-height: 48px;
 }
 
 footer {
   display: flex;
   justify-content: space-between;
-  color: #959b8b;
+  color: #5e5e5e;
   font-size: 10px;
   padding: 23px 0;
 }
@@ -655,7 +685,7 @@ footer {
   z-index: 10;
   display: grid;
   place-items: center;
-  background: #0d2423ba;
+  background: #1a1a1acc;
   padding: 20px;
   backdrop-filter: blur(6px);
 }
@@ -664,7 +694,8 @@ footer {
   width: 100%;
   max-width: 470px;
   border-radius: 18px;
-  background: #f8f7ef;
+  background: var(--game-bg);
+  color: var(--cream);
   padding: 35px;
   box-shadow: 0 20px 80px #0004;
   max-height: 90dvh;
@@ -678,13 +709,13 @@ footer {
   padding-left: 20px;
   font-size: 13px;
   line-height: 2;
-  color: #64705b;
+  color: var(--cream-muted);
 }
 
 .dialog li { margin-bottom: 8px; }
 
 .muted {
-  color: #7d8572;
+  color: var(--cream-muted);
   font-size: 12px;
   line-height: 1.8;
 }
@@ -700,7 +731,7 @@ footer {
 
 .result-score {
   font: 80px ui-monospace, monospace;
-  color: #264c3c;
+  color: var(--cream);
   margin: 20px 0;
 }
 
@@ -713,8 +744,8 @@ footer {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   padding: 18px 0;
-  border-top: 1px solid #dcded1;
-  border-bottom: 1px solid #dcded1;
+  border-top: 1px solid var(--game-line);
+  border-bottom: 1px solid var(--game-line);
 }
 
 .result-stats strong {
@@ -725,7 +756,7 @@ footer {
 .result-stats span {
   display: block;
   font-size: 10px;
-  color: #818b75;
+  color: var(--cream-muted);
   margin-top: 5px;
 }
 
@@ -1097,91 +1128,15 @@ footer {
   width: 100%;
   margin: 10px 0 4px;
   padding: 10px 14px;
-  border: 1px solid #446b41;
+  border: 1px solid var(--cream-muted);
   border-radius: 9px;
   background: transparent;
-  color: #2f4f2d;
+  color: var(--cream);
   font: inherit;
   cursor: pointer;
 }
-.view-map:hover { background: #e1e8d2; }
-
-
-/* ===== 配色主題：淺灰背景、深灰遊戲區、米白字 =====
-   必須放在檔案最後，才能覆蓋前面的顏色設定；要調色只改下面變數即可。 */
-:root {
-  --page-bg: #5D5D66;      /* 淺灰：整頁背景 */
-  --game-bg: #414147;      /* 深灰：遊戲區域 */
-  --game-bg-2: #3b3b3b;    /* 深灰（較亮）：格子、卡片、按鈕 */
-  --game-line: #555;       /* 遊戲區框線 */
-  --cream: #f3ecd8;        /* 米白：遊戲區主要字色 */
-  --cream-muted: #c9c1aa;  /* 米白（較暗）：次要說明字 */
-  --page-text: #2b2b2b;    /* 淺灰背景上的字（米白在淺灰上看不清楚） */
-  background: var(--page-bg);
-  color: var(--page-text);
-}
-body { background: var(--page-bg); }
-
-/* 淺灰背景上的頂部列與頁面標題 */
-.topbar, .workspace-nav { background: var(--page-bg); border-color: #bdbdbd; }
-.workspace-nav button { border-color: #6b6b6b; color: var(--page-text); }
-.workspace-nav button[aria-pressed="true"] { background: var(--game-bg); color: var(--cream); }
-.brand-mark { background: var(--game-bg); }
-.text-button { color: var(--page-text); }
-.edition, .eyebrow, .subtitle, footer { color: #5e5e5e; }
-.player-chip { background: #c8c8c8; border-color: #b5b5b5; }
-.player-chip small { color: #555; }
-
-/* 深灰遊戲區域：地圖、探勘面板、手牌 */
-.mine-panel, .expedition-panel, .hand-panel {
-  background: var(--game-bg);
-  border-color: var(--game-line);
-  color: var(--cream);
-}
-.mine-panel .eyebrow, .expedition-panel .eyebrow, .hand-panel .eyebrow,
-.panel-top .eyebrow, h2 span, .compass, .column-labels, .map-footer,
-.section-label, .timer-label, .timer span, .stats div > span, .stats small,
-.mission-note p, .save-note, .hand-heading p:not(.eyebrow), .card-number,
-.hand-card small, .discard-area > span, .discard-area small, .notice {
-  color: var(--cream-muted);
-}
-.timer, .stats strong, .mission-note strong, .hand-card > span:not(.card-number) { color: var(--cream); }
-.timer.urgent { color: #ff9b73; }
-.section-label span { background: var(--game-bg-2); }
-.time-track { background: var(--game-bg-2); }
-.mission-note, .notice { border-color: var(--game-line); }
-
-/* 地圖格子 */
-.cell { background: var(--game-bg-2); border-color: var(--game-line); color: var(--cream-muted); }
-.cell-mark { color: #777; }
-.cell.target { background: #46443c; color: #e2cf8f; }
-.cell.occupied { color: var(--cream-muted); border-color: #8a8a8a; }
-.cell.entrance { background: var(--cream); border-color: var(--cream); color: #2f2f2f; }
-
-/* 手牌、按鈕、紀錄模式面板 */
-.hand-card { background: var(--game-bg-2); border-color: var(--game-line); color: var(--cream); }
-.hand-card.selected { background: #4d4b42; border-color: var(--cream); }
-.hand-card:not(:disabled):hover { border-color: var(--cream-muted); }
-.hand-card .road-art { background: #262626; }
-.discard-area { border-color: var(--game-line); }
-.discard-area button { color: var(--cream); border-color: var(--cream-muted); }
-.recording-panel { background: var(--game-bg-2); border-color: var(--game-line); color: var(--cream); }
-.recording-panel button { background: #4a4a4a; border-color: var(--cream-muted); color: var(--cream); }
-.primary { background: var(--cream); color: #2f2f2f; }
-.primary:hover { background: #fffaf0; }
-.expedition-panel .text-button, .hand-panel .text-button { color: var(--cream); }
-
-/* 規則／結算視窗也用深灰底米白字 */
-.overlay { background: #1a1a1acc; }
-.dialog { background: var(--game-bg); color: var(--cream); }
-.dialog ol, .muted, .result-stats span { color: var(--cream-muted); }
-.result-score { color: var(--cream); }
-.result-stats { border-color: var(--game-line); }
-.dialog .text-button { color: var(--cream); }
-
-/* 「先看一下地圖」「查看本局成績」 */
-.view-map { border-color: var(--cream-muted); color: var(--cream); }
 .view-map:hover { background: var(--game-bg-2); }
+
 
 /* 抽到破壞牌（落石）提示視窗：淺紅底深紅字，約 1 秒後自動消失 */
 .rock-alert {

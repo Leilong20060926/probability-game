@@ -16,18 +16,19 @@ test('CLI: exact JSON with string fractions, full config snapshot and reproducti
   const out = run('--scenario', 'base', '--format', 'json');
   assert.equal(out.source, 'exact_dp');
   assert.equal(out.ruleset, 'route-v1');
-  assert.equal(out.version, '0.4.0');
+  assert.equal(out.version, '0.5.0');
   assert.match(out.configId, /^route-v1-[0-9a-f]{16}$/);
   assert.equal(out.tieOrder, 'mergedByPay');
   assert.deepEqual(out.ignores, ['timeout', 'abandon']);
   assert.deepEqual(out.config.deck, { H: 4, V: 4, B: 2, X: 1, R: 5 });
-  assert.deepEqual(out.p, { numerator: '125831', denominator: '206388', decimal: '0.609682' });
+  assert.equal(out.config.maxRockCost, 3);
+  assert.deepEqual(out.p, { numerator: '5780251', denominator: '7567560', decimal: '0.763820' });
   for (const v of [out.E, out.E2, out.Var, out.PS, ...out.pmf.map(x => x.prob), ...out.cdf.map(x => x.prob)]) {
     assert.match(v.numerator, fraction);
     assert.match(v.denominator, fraction);
   }
   assert.deepEqual(out.pmf.map(x => x.score), [0, 60, 80, 100]);
-  assert.equal(out.expectedActions.perGame, 5.9811);
+  assert.equal(out.expectedActions.perGame, 6.4313);
   assert.ok(out.stats.states > 0 && out.stats.ms >= 0 && out.stats.cacheHits > 0);
 });
 
@@ -39,7 +40,9 @@ test('CLI: --set produces the same exact result as the named scenario and a diff
   assert.notEqual(viaSet.configId, run('--scenario', 'base').configId);
 
   const hv = run('--set', 'maps.1.B=HV,HV');
-  assert.deepEqual(hv.perMap[0].p, { numerator: '1065413', denominator: '1681680', decimal: '0.633541' });
+  assert.deepEqual(hv.perMap[0].p, { numerator: '63097', denominator: '78624', decimal: '0.802516' });
+  const oldRule = run('--set', 'maxRockCost=null');
+  assert.deepEqual(oldRule.p, { numerator: '125831', denominator: '206388', decimal: '0.609682' });
 });
 
 test('CLI: unknown scenario or bad tie order fails loudly instead of returning something', () => {

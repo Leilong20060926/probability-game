@@ -23,7 +23,7 @@ function chart(result,cumulative=false) {
   }).join('');
   return `<svg class="probability-chart" viewBox="0 0 520 275" role="img" aria-label="route-v1 精確${cumulative?'CDF，實心包含端點、空心不含':'PMF'}，精確分數見表格"><text x="56" y="20">${cumulative?'F(x) = P(X ≤ x)':'P(X = x)'}</text>${[0,.25,.5,.75,1].map(p=>`<line x1="56" x2="490" y1="${y(p)}" y2="${y(p)}" stroke="#d0d5c3"/><text x="46" y="${y(p)+4}" text-anchor="end">${p}</text>`).join('')}<line x1="56" x2="56" y1="30" y2="218" stroke="#243c36"/><line x1="56" x2="490" y1="218" y2="218" stroke="#243c36"/>${marks}${rows.map(row=>`<text x="${x(row.score)}" y="242" text-anchor="middle">${row.score}</text>`).join('')}<text x="270" y="267" text-anchor="middle">最終得分 X（分）</text></svg>`;
 }
-const scenarioNames={base:'基準',rocks4:'只改落石 5→4',forceA:'固定走 A 線',forceB:'固定走 B 線',hand4:'手牌上限 5→4',noDig:'禁止硬挖',map1BHVHV:'地圖一 B 線改 HV→HV（比較用）'};
+const scenarioNames={base:'基準',rocks4:'只改落石 5→4',forceA:'固定走 A 線',forceB:'固定走 B 線',hand4:'手牌上限 5→4',noDig:'禁止硬挖',map1BHVHV:'地圖一 B 線改 HV→HV（比較用）',noRockCap:'落石不設上限（舊規則 0.4.0）'};
 export async function mountRouteAnalysis(root,{fetcher=fetch}={}) {
   let loading=false;
   async function load() {
@@ -44,7 +44,7 @@ export async function mountRouteAnalysis(root,{fetcher=fetch}={}) {
       <p>規則 v${e(result.version)} · 配置 ${e(result.configId)} · 平手順序 mergedByPay（同付法鋪路優先）。正式地圖一 B 線為 HH→HV。</p>
       <section class="route-analysis-cards"><div><span>單張地圖平均通關率 p</span>${fraction(result.p)}</div><div><span>整局挖到金礦 P(S)</span>${fraction(result.PS)}<strong>${percent(result.PS)}</strong></div><div><span>期望得分 E[X]（分）</span>${fraction(result.E)}</div><div><span>變異數 Var(X)（分²）</span>${fraction(result.Var)}</div></section>
       <section><h2>模型假設與精確遞迴</h2><p>H4、V4、B2、X1、R5；每張圖重洗 16 張，抽到 5 張道路牌。地圖一／二／三各 1/3，獨立可重複。每張地圖終點是金礦的條件機率為 1/3、1/2、1。</p>
-      <p>狀態 s＝（地圖種類、目前路段、a、手牌各類張數、牌庫各類張數）。抽到 t 的權重為 dₜ/Σd；draw(s,n)＝Σₜ[dₜ/Σd]·下一狀態價值。R 使 a+1 且 n 不減，道路牌使 n−1；best(s)＝maxₐ Q(s,a)。終點價值 1，無合法動作價值 0；岔路先補完牌再取 max(A,B)。所有機率以 BigInt 有理數運算。</p>
+      <p>狀態 s＝（地圖種類、目前路段、a、手牌各類張數、牌庫各類張數）。抽到 t 的權重為 dₜ/Σd；draw(s,n)＝Σₜ[dₜ/Σd]·下一狀態價值。R 使 a+1（a 最多 ${e(result.config.maxRockCost??'∞')}） 且 n 不減，道路牌使 n−1；best(s)＝maxₐ Q(s,a)。終點價值 1，無合法動作價值 0；岔路先補完牌再取 max(A,B)。所有機率以 BigInt 有理數運算。</p>
       <div class="table-scroll"><table class="analysis-table"><thead><tr><th>地圖</th><th>精確通關率 pᵢ</th><th>期望動作數</th></tr></thead><tbody>${result.perMap.map(row=>`<tr><td>地圖${row.mapId}</td><td>${fraction(row.p)}</td><td>${row.expectedActions}</td></tr>`).join('')}</tbody></table></div><p>平均每張地圖 ${result.expectedActions.perMapAverage} 次動作，每局 ${result.expectedActions.perGame} 次；鋪路／硬挖／換牌各算一次，選岔路不算。</p></section>
       <section><h2>PMF 與右連續 CDF</h2><p>p＝(p₁+p₂+p₃)/3。P(60)＝p/3；P(80)＝p²/3；P(100)＝p³/3；P(0)＝1−(p+p²+p³)/3。每張地圖重抽並重洗，這些分支不等機率。</p>
       <div class="model-charts"><figure><figcaption>PMF：各得分的精確機率</figcaption>${chart(result)}</figure><figure><figcaption>CDF：實心包含端點，空心不含</figcaption>${chart(result,true)}</figure></div>

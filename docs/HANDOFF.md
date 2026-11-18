@@ -498,3 +498,17 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前�
 窄螢幕維持橫向路線，以地圖區左右捲動容納，不讓整頁橫向溢出；選牌重繪保留地圖水平捲動位置，前進新路段時僅將該區捲至目前位置。未變更 backend／shared／規則或機率資料。
 
 驗證：`npm.cmd test` 39/39、`npm.cmd run build` 成功。瀏覽器 inventory 本次仍為 apps=[]／browsers=[]，因此尚未實際驗收視覺、左右捲動與手機觸控；不可將測試通過當作瀏覽器驗收完成。既有本機修改保留，未 Push、未部署。
+
+## 修正：落石加需求超過手牌上限造成必敗狀態（2026-11-18，ROUTE_VERSION 0.5.0）
+
+使用者回報「第一張地圖抽到太多落石好像贏不了」。檢查結果：0.4.0 的落石加需求 a 沒有上限，而手牌上限 5。開局翻到 4 張以上落石時（P=0.141），平直／上坡第一段要付 2+a≥6 張、硬挖 3+a≥7 張，永遠付不出；引擎仍允許換牌，玩家只能白換約 5～7 次直到牌庫空才判 exhausted。模擬 50,000 局：10.2% 的地圖發牌當下即必敗，12.6% 的地圖在某時點進入必敗，平均白做 5.5 次換牌。
+
+使用者決定：每段落石加需求最多 3 張。
+
+- `shared/route-config.js`：`maxRockCost: 3`（null＝不設上限）、`addRock(config, a)`；新增比較情境 `noRockCap`（＝0.4.0 舊規則）。ROUTE_VERSION 0.4.0 → 0.5.0，configId 隨之改變；舊版進行中的局照既有 stale-games 邏輯結算，資料以 version 區分。
+- `shared/route-engine.js`：落石 `a = addRock(...)`，rock 事件多 `capped`（後端 gameView 白名單已加）。`shared/route-analysis.js`：draw 的落石分支同樣用 `addRock`，引擎與精算規則一致。
+- 新精確值（獨立 Python 狀態遞迴交叉驗證一致）：p₁=24345551/30270240、p₂=2610109/3363360、p₃=269081/378378、p=5780251/7567560≈0.7638；P(S)≈0.5976、E[X]≈45.69、Var≈1559.20、每局動作數≈6.43。原規格數值完整保留在 `noRockCap`，測試逐項比對。
+- 測試：exact（新基準＋noRockCap 重現原規格）、引擎（5 張開局落石 a 停在 3、capped 標記、仍可鋪路；牌庫空才判失敗改用付不出的手牌）、cli-hints、backend route-v1、frontend 情境數。`frontend/data/route-analysis.json` 以 CLI 重算。
+- 前端最小改動（Codex 範圍）：落石效果文字顯示「已達上限」、教學與開局提示說明每段最多 3 張、分析頁說明 a 的上限與情境名稱。
+- 模擬驗證：每圖 200,000 次皆在 95% 區間內。整局 100,000 局（固定 seed 20261118）的地圖通關率 0.7664 落在 95% 區間外（z≈2.5）；依測試說明不換 seed，另以 seed 1～4 共 400,000 局得 0.7638（z≈0.05），判定為抽樣誤差。整局通關率檢查改為與同測試 PMF 一致的 4 個標準誤門檻。
+- 結果：npm test 39/39、test:backend 39/39、test:route 35/35、test:route:sim 2/2、build 通過。未 Push、未部署。

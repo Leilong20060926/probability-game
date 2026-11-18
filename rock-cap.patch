@@ -1,0 +1,2209 @@
+From e787580914bbb6342e848b80d0f7ed0fd77d5e98 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 18 Nov 2026 01:46:06 +0100
+Subject: [PATCH] =?UTF-8?q?=E4=BF=AE=E6=AD=A3=E8=90=BD=E7=9F=B3=E5=8A=A0?=
+ =?UTF-8?q?=E9=9C=80=E6=B1=82=E8=B6=85=E9=81=8E=E6=89=8B=E7=89=8C=E4=B8=8A?=
+ =?UTF-8?q?=E9=99=90=E9=80=A0=E6=88=90=E7=9A=84=E5=BF=85=E6=95=97=E7=8B=80?=
+ =?UTF-8?q?=E6=85=8B=EF=BC=88route-v1=200.5.0=EF=BC=89?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+每段落石加需求最多 3 張（maxRockCost）。0.4.0 時開局翻到 4 張以上落石，
+第一段要付 6 張以上、硬挖 7 張以上，永遠付不出，只能換牌到牌庫用完；
+約 12.6% 的地圖會遇到。
+
+- route-config: maxRockCost=3、addRock、noRockCap 比較情境、版本 0.5.0
+- route-engine / route-analysis: 落石共用 addRock，rock 事件帶 capped
+- 測試、分析資料、前端提示與文件同步更新；原規格數值保留在 noRockCap
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Y72xGyEZ7kjoMkJNDEKcZg
+---
+ backend/src/gameView.js                       |   2 +-
+ backend/tests/route-v1.test.js                |   4 +-
+ docs/HANDOFF.md                               |  14 +
+ docs/RULES_ROUTE_V1.md                        |   3 +-
+ frontend/data/route-analysis.json             | 970 +++++++++++-------
+ frontend/src/route-analysis-view.js           |   4 +-
+ frontend/src/route-app.js                     |   4 +-
+ frontend/src/route-effects.js                 |   2 +-
+ shared/route-analysis.js                      |   4 +-
+ shared/route-config.js                        |  13 +-
+ shared/route-engine.js                        |   9 +-
+ tests/route-frontend.test.js                  |   2 +-
+ tools/route-version/tests/cli-hints.test.js   |  11 +-
+ tools/route-version/tests/engine.test.js      |  24 +-
+ tools/route-version/tests/exact.test.js       |  93 +-
+ .../validation/simulation.test.js             |   6 +-
+ 16 files changed, 726 insertions(+), 439 deletions(-)
+
+diff --git a/backend/src/gameView.js b/backend/src/gameView.js
+index 958985f..8470dbd 100644
+--- a/backend/src/gameView.js
++++ b/backend/src/gameView.js
+@@ -72,7 +72,7 @@ const ROUTE_COMMON = ['mapIndex', 'mapId', 'pos', 'branch', 'a'];
+ const ROUTE_FIELDS = {
+   map_start: [],
+   draw: ['card'],
+-  rock: ['card'],
++  rock: ['card', 'capped'],
+   pay: ['action', 'pay', 'segment'],
+   exchange: ['discard'],
+   advance: [],
+diff --git a/backend/tests/route-v1.test.js b/backend/tests/route-v1.test.js
+index b69509f..7375945 100644
+--- a/backend/tests/route-v1.test.js
++++ b/backend/tests/route-v1.test.js
+@@ -94,7 +94,7 @@ test('route-v1: full three-map HTTP game (coin → coin → gold = 100) with saf
+   const { close, db, client, game } = await setup();
+   try {
+     assert.equal(game.ruleset, 'route-v1');
+-    assert.equal(game.version, '0.4.0');
++    assert.equal(game.version, '0.5.0');
+     assert.equal(game.phase, 'segment');
+     assert.equal(game.mapIndex, 1);
+     assert.ok([1, 2, 3].includes(game.mapId));
+@@ -403,7 +403,7 @@ test('route-v1: /api/route/analysis is public and exact; /shared serves only the
+     const res = await client.get('/api/route/analysis');
+     assert.equal(res.status, 200);
+     assert.match(res.headers.get('cache-control'), /public/);
+-    assert.deepEqual(res.body.p, { numerator: '125831', denominator: '206388', decimal: '0.609682' });
++    assert.deepEqual(res.body.p, { numerator: '5780251', denominator: '7567560', decimal: '0.763820' });
+     assert.equal(res.body.source, 'exact_dp');
+     assert.equal(res.body.configId, makeConfig().configId);
+ 
+diff --git a/docs/HANDOFF.md b/docs/HANDOFF.md
+index 2273dc2..8477b86 100644
+--- a/docs/HANDOFF.md
++++ b/docs/HANDOFF.md
+@@ -498,3 +498,17 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前
+ 窄螢幕維持橫向路線，以地圖區左右捲動容納，不讓整頁橫向溢出；選牌重繪保留地圖水平捲動位置，前進新路段時僅將該區捲至目前位置。未變更 backend／shared／規則或機率資料。
+ 
+ 驗證：`npm.cmd test` 39/39、`npm.cmd run build` 成功。瀏覽器 inventory 本次仍為 apps=[]／browsers=[]，因此尚未實際驗收視覺、左右捲動與手機觸控；不可將測試通過當作瀏覽器驗收完成。既有本機修改保留，未 Push、未部署。
++
++## 修正：落石加需求超過手牌上限造成必敗狀態（2026-11-18，ROUTE_VERSION 0.5.0）
++
++使用者回報「第一張地圖抽到太多落石好像贏不了」。檢查結果：0.4.0 的落石加需求 a 沒有上限，而手牌上限 5。開局翻到 4 張以上落石時（P=0.141），平直／上坡第一段要付 2+a≥6 張、硬挖 3+a≥7 張，永遠付不出；引擎仍允許換牌，玩家只能白換約 5～7 次直到牌庫空才判 exhausted。模擬 50,000 局：10.2% 的地圖發牌當下即必敗，12.6% 的地圖在某時點進入必敗，平均白做 5.5 次換牌。
++
++使用者決定：每段落石加需求最多 3 張。
++
++- `shared/route-config.js`：`maxRockCost: 3`（null＝不設上限）、`addRock(config, a)`；新增比較情境 `noRockCap`（＝0.4.0 舊規則）。ROUTE_VERSION 0.4.0 → 0.5.0，configId 隨之改變；舊版進行中的局照既有 stale-games 邏輯結算，資料以 version 區分。
++- `shared/route-engine.js`：落石 `a = addRock(...)`，rock 事件多 `capped`（後端 gameView 白名單已加）。`shared/route-analysis.js`：draw 的落石分支同樣用 `addRock`，引擎與精算規則一致。
++- 新精確值（獨立 Python 狀態遞迴交叉驗證一致）：p₁=24345551/30270240、p₂=2610109/3363360、p₃=269081/378378、p=5780251/7567560≈0.7638；P(S)≈0.5976、E[X]≈45.69、Var≈1559.20、每局動作數≈6.43。原規格數值完整保留在 `noRockCap`，測試逐項比對。
++- 測試：exact（新基準＋noRockCap 重現原規格）、引擎（5 張開局落石 a 停在 3、capped 標記、仍可鋪路；牌庫空才判失敗改用付不出的手牌）、cli-hints、backend route-v1、frontend 情境數。`frontend/data/route-analysis.json` 以 CLI 重算。
++- 前端最小改動（Codex 範圍）：落石效果文字顯示「已達上限」、教學與開局提示說明每段最多 3 張、分析頁說明 a 的上限與情境名稱。
++- 模擬驗證：每圖 200,000 次皆在 95% 區間內。整局 100,000 局（固定 seed 20261118）的地圖通關率 0.7664 落在 95% 區間外（z≈2.5）；依測試說明不換 seed，另以 seed 1～4 共 400,000 局得 0.7638（z≈0.05），判定為抽樣誤差。整局通關率檢查改為與同測試 PMF 一致的 4 個標準誤門檻。
++- 結果：npm test 39/39、test:backend 39/39、test:route 35/35、test:route:sim 2/2、build 通過。未 Push、未部署。
+diff --git a/docs/RULES_ROUTE_V1.md b/docs/RULES_ROUTE_V1.md
+index fcdd0ae..b0563d2 100644
+--- a/docs/RULES_ROUTE_V1.md
++++ b/docs/RULES_ROUTE_V1.md
+@@ -15,7 +15,8 @@
+ 
+ ## 流程
+ 
+-1. 開局發牌：依序抽到手上 5 張道路牌為止；每張落石翻開移出、第一段 `a+1`、繼續抽。開局後牌庫剩 `16-5-r0`。
++1. 開局發牌：依序抽到手上 5 張道路牌為止；每張落石翻開移出、第一段 `a+1`、繼續抽。
++   - **0.5.0 起每段落石加需求最多 3 張**（`maxRockCost: 3`）：`a` 已是 3 時再抽到落石，照樣翻開移出（事件 `capped: true`），但不再加需求。最大付款 2+3=5 不超過手牌上限，所以不會再出現「張數永遠付不出、只能換牌到牌庫用完」的必敗狀態（0.4.0 約 12.6% 的地圖會遇到）。開局後牌庫剩 `16-5-r0`。
+ 2. 每回合在目前路段選一個動作（`turn`、`mapActionCount` +1）：
+    - **鋪路 pave**：交出剛好 `need總數+a` 張，且 `Σ max(0, need[t]-pay[t]) ≤ pay.X`。十字每張補一個缺口，其餘付牌可當任意成本。每種不同的 `pay=(H,V,B,X)` 組合都是不同動作。
+    - **硬挖 dig**：交出剛好 `3+a` 張任意道路牌。能鋪路時也可以硬挖。
+diff --git a/frontend/data/route-analysis.json b/frontend/data/route-analysis.json
+index e7bb7f7..ba288dc 100644
+--- a/frontend/data/route-analysis.json
++++ b/frontend/data/route-analysis.json
+@@ -3,9 +3,9 @@
+     {
+       "scenario": "base",
+       "ruleset": "route-v1",
+-      "version": "0.4.0",
++      "version": "0.5.0",
+       "source": "exact_dp",
+-      "configId": "route-v1-8ef987f14181be86",
++      "configId": "route-v1-a23118362f5663f7",
+       "config": {
+         "deck": {
+           "H": 4,
+@@ -16,6 +16,7 @@
+         },
+         "handLimit": 5,
+         "digBase": 3,
++        "maxRockCost": 3,
+         "allowDig": true,
+         "forceBranch": null,
+         "goldScore": 60,
+@@ -62,7 +63,7 @@
+             ]
+           }
+         },
+-        "configId": "route-v1-8ef987f14181be86"
++        "configId": "route-v1-a23118362f5663f7"
+       },
+       "tieOrder": "mergedByPay",
+       "ignores": [
+@@ -73,67 +74,67 @@
+         {
+           "mapId": 1,
+           "p": {
+-            "numerator": "389017",
+-            "denominator": "617760",
+-            "decimal": "0.629722"
++            "numerator": "24345551",
++            "denominator": "30270240",
++            "decimal": "0.804273"
+           },
+-          "expectedActions": 4.0217
++          "expectedActions": 3.7536
+         },
+         {
+           "mapId": 2,
+           "p": {
+-            "numerator": "4577077",
+-            "denominator": "7567560",
+-            "decimal": "0.604829"
++            "numerator": "2610109",
++            "denominator": "3363360",
++            "decimal": "0.776042"
+           },
+-          "expectedActions": 4.0444
++          "expectedActions": 3.7943
+         },
+         {
+           "mapId": 3,
+           "p": {
+-            "numerator": "17995499",
+-            "denominator": "30270240",
+-            "decimal": "0.594495"
++            "numerator": "269081",
++            "denominator": "378378",
++            "decimal": "0.711143"
+           },
+-          "expectedActions": 3.6589
++          "expectedActions": 3.7768
+         }
+       ],
+       "p": {
+-        "numerator": "125831",
+-        "denominator": "206388",
+-        "decimal": "0.609682"
++        "numerator": "5780251",
++        "denominator": "7567560",
++        "decimal": "0.763820"
+       },
+       "pmf": [
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "15753845906636293",
+-            "denominator": "26373913795809216",
+-            "decimal": "0.597327"
++            "numerator": "523145321420516293589",
++            "denominator": "1300136268971187648000",
++            "decimal": "0.402377"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "125831",
+-            "denominator": "619164",
+-            "decimal": "0.203227"
++            "numerator": "5780251",
++            "denominator": "22702680",
++            "decimal": "0.254607"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "15833440561",
+-            "denominator": "127788019632",
+-            "decimal": "0.123904"
++            "numerator": "33411301623001",
++            "denominator": "171803893060800",
++            "decimal": "0.194473"
+           }
+         },
+         {
+           "score": 100,
+           "prob": {
+-            "numerator": "1992337659231191",
+-            "denominator": "26373913795809216",
+-            "decimal": "0.075542"
++            "numerator": "193125709617653153251",
++            "denominator": "1300136268971187648000",
++            "decimal": "0.148543"
+           }
+         }
+       ],
+@@ -141,25 +142,25 @@
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "15753845906636293",
+-            "denominator": "26373913795809216",
+-            "decimal": "0.597327"
++            "numerator": "523145321420516293589",
++            "denominator": "1300136268971187648000",
++            "decimal": "0.402377"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "21113744006074357",
+-            "denominator": "26373913795809216",
+-            "decimal": "0.800554"
++            "numerator": "854168529643377047189",
++            "denominator": "1300136268971187648000",
++            "decimal": "0.656984"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "24381576136578025",
+-            "denominator": "26373913795809216",
+-            "decimal": "0.924458"
++            "numerator": "1107010559353534494749",
++            "denominator": "1300136268971187648000",
++            "decimal": "0.851457"
+           }
+         },
+         {
+@@ -172,42 +173,42 @@
+         }
+       ],
+       "E": {
+-        "numerator": "195563555582424095",
+-        "denominator": "6593478448952304",
+-        "decimal": "29.660149"
++        "numerator": "594013258319495563459",
++        "denominator": "13001362689711876480",
++        "decimal": "45.688538"
+       },
+       "E2": {
+-        "numerator": "3758320961594525975",
+-        "denominator": "1648369612238076",
+-        "decimal": "2280.023202"
++        "numerator": "2370564817961918954927",
++        "denominator": "650068134485593824",
++        "decimal": "3646.640548"
+       },
+       "Var": {
+-        "numerator": "60876528786036948852862724619816575",
+-        "denominator": "43473958056798480504795266908416",
+-        "decimal": "1400.298742"
++        "numerator": "263559708496530623997316749253650332294519",
++        "denominator": "169035431789432039334004077562777190400",
++        "decimal": "1559.198008"
+       },
+       "PS": {
+-        "numerator": "10620067889172923",
+-        "denominator": "26373913795809216",
+-        "decimal": "0.402673"
++        "numerator": "776990947550671354411",
++        "denominator": "1300136268971187648000",
++        "decimal": "0.597623"
+       },
+       "expectedActions": {
+-        "perMapAverage": 3.9083,
+-        "perGame": 5.9811
++        "perMapAverage": 3.7749,
++        "perGame": 6.4313
+       },
+       "stats": {
+-        "states": 331950,
+-        "cacheHits": 654212,
+-        "cacheMisses": 331950,
+-        "ms": 1415
++        "states": 305485,
++        "cacheHits": 638214,
++        "cacheMisses": 305485,
++        "ms": 1537
+       }
+     },
+     {
+       "scenario": "rocks4",
+       "ruleset": "route-v1",
+-      "version": "0.4.0",
++      "version": "0.5.0",
+       "source": "exact_dp",
+-      "configId": "route-v1-455f3870fe57885f",
++      "configId": "route-v1-38b8567111b9295e",
+       "config": {
+         "deck": {
+           "H": 4,
+@@ -218,6 +219,7 @@
+         },
+         "handLimit": 5,
+         "digBase": 3,
++        "maxRockCost": 3,
+         "allowDig": true,
+         "forceBranch": null,
+         "goldScore": 60,
+@@ -264,7 +266,7 @@
+             ]
+           }
+         },
+-        "configId": "route-v1-455f3870fe57885f"
++        "configId": "route-v1-38b8567111b9295e"
+       },
+       "tieOrder": "mergedByPay",
+       "ignores": [
+@@ -275,67 +277,67 @@
+         {
+           "mapId": 1,
+           "p": {
+-            "numerator": "158021",
+-            "denominator": "171990",
+-            "decimal": "0.918780"
++            "numerator": "3109",
++            "denominator": "3185",
++            "decimal": "0.976138"
+           },
+-          "expectedActions": 3.9509
++          "expectedActions": 3.8198
+         },
+         {
+           "mapId": 2,
+           "p": {
+-            "numerator": "1477877",
+-            "denominator": "1576575",
+-            "decimal": "0.937397"
++            "numerator": "9368323",
++            "denominator": "9459450",
++            "decimal": "0.990367"
+           },
+-          "expectedActions": 4.1048
++          "expectedActions": 4.0088
+         },
+         {
+           "mapId": 3,
+           "p": {
+-            "numerator": "4314851",
+-            "denominator": "4729725",
+-            "decimal": "0.912284"
++            "numerator": "2905817",
++            "denominator": "3153150",
++            "decimal": "0.921560"
+           },
+-          "expectedActions": 4.0107
++          "expectedActions": 4.0253
+         }
+       ],
+       "p": {
+-        "numerator": "2909791",
+-        "denominator": "3153150",
+-        "decimal": "0.922820"
++        "numerator": "13659752",
++        "denominator": "14189175",
++        "decimal": "0.962688"
+       },
+       "pmf": [
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "13784818292584681679",
+-            "denominator": "94049209271642625000",
+-            "decimal": "0.146570"
++            "numerator": "623781060369535811917",
++            "denominator": "8570234194878434203125",
++            "decimal": "0.072785"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "2909791",
+-            "denominator": "9459450",
+-            "decimal": "0.307607"
++            "numerator": "13659752",
++            "denominator": "42567525",
++            "decimal": "0.320896"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "8466883663681",
+-            "denominator": "29827064767500",
+-            "decimal": "0.283866"
++            "numerator": "186588824701504",
++            "denominator": "603998061541875",
++            "decimal": "0.308923"
+           }
+         },
+         {
+           "score": 100,
+           "prob": {
+-            "numerator": "24636861882626000671",
+-            "denominator": "94049209271642625000",
+-            "decimal": "0.261957"
++            "numerator": "2548757071394018667008",
++            "denominator": "8570234194878434203125",
++            "decimal": "0.297396"
+           }
+         }
+       ],
+@@ -343,25 +345,25 @@
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "13784818292584681679",
+-            "denominator": "94049209271642625000",
+-            "decimal": "0.146570"
++            "numerator": "623781060369535811917",
++            "denominator": "8570234194878434203125",
++            "decimal": "0.072785"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "42714993164880879179",
+-            "denominator": "94049209271642625000",
+-            "decimal": "0.454177"
++            "numerator": "3373935636750452516917",
++            "denominator": "8570234194878434203125",
++            "decimal": "0.393681"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "69412347389016624329",
+-            "denominator": "94049209271642625000",
+-            "decimal": "0.738043"
++            "numerator": "6021477123484415536117",
++            "denominator": "8570234194878434203125",
++            "decimal": "0.702604"
+           }
+         },
+         {
+@@ -374,42 +376,42 @@
+         }
+       ],
+       "E": {
+-        "numerator": "63352850185312315291",
+-        "denominator": "940492092716426250",
+-        "decimal": "67.361385"
++        "numerator": "25267532026438956421472",
++        "denominator": "342809367795137368125",
++        "decimal": "73.707239"
+       },
+       "E2": {
+-        "numerator": "104276063080199017334",
+-        "denominator": "18809841854328525",
+-        "decimal": "5543.696959"
++        "numerator": "83731828326414160209536",
++        "denominator": "13712374711805494725",
++        "decimal": "6106.296691"
+       },
+       "Var": {
+-        "numerator": "889957012723695659397904800003138460319",
+-        "denominator": "884525376462122909765696571689062500",
+-        "decimal": "1006.140735"
++        "numerator": "79153203615606975574355646421868335083353216",
++        "denominator": "117518262648101765322197887938751766015625",
++        "decimal": "673.539600"
+       },
+       "PS": {
+-        "numerator": "80264390979057943321",
+-        "denominator": "94049209271642625000",
+-        "decimal": "0.853430"
++        "numerator": "7946453134508898391208",
++        "denominator": "8570234194878434203125",
++        "decimal": "0.927215"
+       },
+       "expectedActions": {
+-        "perMapAverage": 4.0221,
+-        "perGame": 7.6383
++        "perMapAverage": 3.9513,
++        "perGame": 7.7078
+       },
+       "stats": {
+-        "states": 262174,
+-        "cacheHits": 531673,
+-        "cacheMisses": 262174,
+-        "ms": 1135
++        "states": 251624,
++        "cacheHits": 527401,
++        "cacheMisses": 251624,
++        "ms": 1181
+       }
+     },
+     {
+       "scenario": "forceA",
+       "ruleset": "route-v1",
+-      "version": "0.4.0",
++      "version": "0.5.0",
+       "source": "exact_dp",
+-      "configId": "route-v1-5101c161717bcc5e",
++      "configId": "route-v1-606697789699977f",
+       "config": {
+         "deck": {
+           "H": 4,
+@@ -420,6 +422,7 @@
+         },
+         "handLimit": 5,
+         "digBase": 3,
++        "maxRockCost": 3,
+         "allowDig": true,
+         "forceBranch": "A",
+         "goldScore": 60,
+@@ -466,7 +469,7 @@
+             ]
+           }
+         },
+-        "configId": "route-v1-5101c161717bcc5e"
++        "configId": "route-v1-606697789699977f"
+       },
+       "tieOrder": "mergedByPay",
+       "ignores": [
+@@ -477,67 +480,67 @@
+         {
+           "mapId": 1,
+           "p": {
+-            "numerator": "18059617",
+-            "denominator": "30270240",
+-            "decimal": "0.596613"
++            "numerator": "324437",
++            "denominator": "432432",
++            "decimal": "0.750261"
+           },
+-          "expectedActions": 4.0757
++          "expectedActions": 3.8659
+         },
+         {
+           "mapId": 2,
+           "p": {
+-            "numerator": "3044221",
+-            "denominator": "6054048",
+-            "decimal": "0.502841"
++            "numerator": "20095469",
++            "denominator": "30270240",
++            "decimal": "0.663869"
+           },
+-          "expectedActions": 3.9133
++          "expectedActions": 3.7058
+         },
+         {
+           "mapId": 3,
+           "p": {
+-            "numerator": "390955",
+-            "denominator": "756756",
+-            "decimal": "0.516620"
++            "numerator": "914513",
++            "denominator": "1441440",
++            "decimal": "0.634444"
+           },
+-          "expectedActions": 3.5356
++          "expectedActions": 3.6869
+         }
+       ],
+       "p": {
+-        "numerator": "1881497",
+-        "denominator": "3492720",
+-        "decimal": "0.538691"
++        "numerator": "298129",
++        "denominator": "436590",
++        "decimal": "0.682858"
+       },
+       "pmf": [
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "85846596841723434247",
+-            "denominator": "127824048292114944000",
+-            "decimal": "0.671600"
++            "numerator": "127527242311857221",
++            "denominator": "249656344320537000",
++            "decimal": "0.510811"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "1881497",
+-            "denominator": "10478160",
+-            "decimal": "0.179564"
++            "numerator": "298129",
++            "denominator": "1309770",
++            "decimal": "0.227619"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "3540030961009",
+-            "denominator": "36597278995200",
+-            "decimal": "0.096729"
++            "numerator": "88880900641",
++            "denominator": "571832484300",
++            "decimal": "0.155432"
+           }
+         },
+         {
+           "score": 100,
+           "prob": {
+-            "numerator": "6660557633045550473",
+-            "denominator": "127824048292114944000",
+-            "decimal": "0.052107"
++            "numerator": "26497974027200689",
++            "denominator": "249656344320537000",
++            "decimal": "0.106138"
+           }
+         }
+       ],
+@@ -545,25 +548,25 @@
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "85846596841723434247",
+-            "denominator": "127824048292114944000",
+-            "decimal": "0.671600"
++            "numerator": "127527242311857221",
++            "denominator": "249656344320537000",
++            "decimal": "0.510811"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "108799153720934039047",
+-            "denominator": "127824048292114944000",
+-            "decimal": "0.851163"
++            "numerator": "184353857882482121",
++            "denominator": "249656344320537000",
++            "decimal": "0.738430"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "121163490659069393527",
+-            "denominator": "127824048292114944000",
+-            "decimal": "0.947893"
++            "numerator": "223158370293336311",
++            "denominator": "249656344320537000",
++            "decimal": "0.893862"
+           }
+         },
+         {
+@@ -576,42 +579,42 @@
+         }
+       ],
+       "E": {
+-        "numerator": "30323561311080196937",
+-        "denominator": "1278240482921149440",
+-        "decimal": "23.722892"
++        "numerator": "91637553298258981",
++        "denominator": "2496563443205370",
++        "decimal": "36.705478"
+       },
+       "E2": {
+-        "numerator": "114183268749839975341",
+-        "denominator": "63912024146057472",
+-        "decimal": "1786.569433"
++        "numerator": "717904435755723346",
++        "denominator": "249656344320537",
++        "decimal": "2875.570568"
+       },
+       "Var": {
+-        "numerator": "1999555161179377079187496714376814998831",
+-        "denominator": "1633898732178493333207776450812313600",
+-        "decimal": "1223.793814"
++        "numerator": "9525498525735914728978526068521839",
++        "denominator": "6232829025949452717619996836900",
++        "decimal": "1528.278489"
+       },
+       "PS": {
+-        "numerator": "41977451450391509753",
+-        "denominator": "127824048292114944000",
+-        "decimal": "0.328400"
++        "numerator": "122129102008679779",
++        "denominator": "249656344320537000",
++        "decimal": "0.489189"
+       },
+       "expectedActions": {
+-        "perMapAverage": 3.8415,
+-        "perGame": 5.5927
++        "perMapAverage": 3.7529,
++        "perGame": 6.0446
+       },
+       "stats": {
+-        "states": 241441,
+-        "cacheHits": 458914,
+-        "cacheMisses": 241441,
+-        "ms": 969
++        "states": 223706,
++        "cacheHits": 448634,
++        "cacheMisses": 223706,
++        "ms": 1060
+       }
+     },
+     {
+       "scenario": "forceB",
+       "ruleset": "route-v1",
+-      "version": "0.4.0",
++      "version": "0.5.0",
+       "source": "exact_dp",
+-      "configId": "route-v1-77f6fe3b7be414bf",
++      "configId": "route-v1-1fae2596a0641c3e",
+       "config": {
+         "deck": {
+           "H": 4,
+@@ -622,6 +625,7 @@
+         },
+         "handLimit": 5,
+         "digBase": 3,
++        "maxRockCost": 3,
+         "allowDig": true,
+         "forceBranch": "B",
+         "goldScore": 60,
+@@ -668,7 +672,7 @@
+             ]
+           }
+         },
+-        "configId": "route-v1-77f6fe3b7be414bf"
++        "configId": "route-v1-1fae2596a0641c3e"
+       },
+       "tieOrder": "mergedByPay",
+       "ignores": [
+@@ -679,67 +683,67 @@
+         {
+           "mapId": 1,
+           "p": {
+-            "numerator": "32435",
+-            "denominator": "77616",
+-            "decimal": "0.417891"
++            "numerator": "347211",
++            "denominator": "560560",
++            "decimal": "0.619400"
+           },
+-          "expectedActions": 3.2807
++          "expectedActions": 3.0469
+         },
+         {
+           "mapId": 2,
+           "p": {
+-            "numerator": "5561737",
++            "numerator": "7173077",
+             "denominator": "10090080",
+-            "decimal": "0.551208"
++            "decimal": "0.710904"
+           },
+-          "expectedActions": 3.9924
++          "expectedActions": 3.7087
+         },
+         {
+           "mapId": 3,
+           "p": {
+-            "numerator": "214793",
+-            "denominator": "432432",
+-            "decimal": "0.496709"
++            "numerator": "405959",
++            "denominator": "630630",
++            "decimal": "0.643736"
+           },
+-          "expectedActions": 3.6268
++          "expectedActions": 3.8204
+         }
+       ],
+       "p": {
+-        "numerator": "44370371",
+-        "denominator": "90810720",
+-        "decimal": "0.488603"
++        "numerator": "19918219",
++        "denominator": "30270240",
++        "decimal": "0.658013"
+       },
+       "pmf": [
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "1614596308699515169331269",
+-            "denominator": "2246635472782212255744000",
+-            "decimal": "0.718673"
++            "numerator": "45046366750871286419501",
++            "denominator": "83208721214156009472000",
++            "decimal": "0.541366"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "44370371",
+-            "denominator": "272432160",
+-            "decimal": "0.162868"
++            "numerator": "19918219",
++            "denominator": "90810720",
++            "decimal": "0.219338"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "1968729822677641",
+-            "denominator": "24739760600755200",
+-            "decimal": "0.079578"
++            "numerator": "396735448131961",
++            "denominator": "2748862288972800",
++            "decimal": "0.144327"
+           }
+         },
+         {
+           "score": 100,
+           "prob": {
+-            "numerator": "87353272630971144574811",
+-            "denominator": "2246635472782212255744000",
+-            "decimal": "0.038882"
++            "numerator": "7902263540955540097459",
++            "denominator": "83208721214156009472000",
++            "decimal": "0.094969"
+           }
+         }
+       ],
+@@ -747,25 +751,25 @@
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "1614596308699515169331269",
+-            "denominator": "2246635472782212255744000",
+-            "decimal": "0.718673"
++            "numerator": "45046366750871286419501",
++            "denominator": "83208721214156009472000",
++            "decimal": "0.541366"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "1980500427468412204057669",
+-            "denominator": "2246635472782212255744000",
+-            "decimal": "0.881541"
++            "numerator": "63297180441738458233901",
++            "denominator": "83208721214156009472000",
++            "decimal": "0.760704"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "2159282200151241111169189",
+-            "denominator": "2246635472782212255744000",
+-            "decimal": "0.961118"
++            "numerator": "75306457673200469374541",
++            "denominator": "83208721214156009472000",
++            "decimal": "0.905031"
+           }
+         },
+         {
+@@ -778,42 +782,42 @@
+         }
+       ],
+       "E": {
+-        "numerator": "449921162038572491099867",
+-        "denominator": "22466354727822122557440",
+-        "decimal": "20.026443"
++        "numerator": "28460173540645452098611",
++        "denominator": "832087212141560094720",
++        "decimal": "34.203354"
+       },
+       "E2": {
+-        "numerator": "1667495449523922888138439",
+-        "denominator": "1123317736391106127872",
+-        "decimal": "1484.437925"
++        "numerator": "110792469489017045403263",
++        "denominator": "41604360607078004736",
++        "decimal": "2663.001375"
+       },
+       "Var": {
+-        "numerator": "546821833470533805984632149025620231301621305511",
+-        "denominator": "504737094756335438538706831537211686099353600",
+-        "decimal": "1083.379524"
++        "numerator": "1033798463304245519027260652077247673473297879",
++        "denominator": "692369128609513633112080701697135371878400",
++        "decimal": "1493.131944"
+       },
+       "PS": {
+-        "numerator": "632039164082697086412731",
+-        "denominator": "2246635472782212255744000",
+-        "decimal": "0.281327"
++        "numerator": "38162354463284723052499",
++        "denominator": "83208721214156009472000",
++        "decimal": "0.458634"
+       },
+       "expectedActions": {
+-        "perMapAverage": 3.6333,
+-        "perGame": 5.1059
++        "perMapAverage": 3.5253,
++        "perGame": 5.5806
+       },
+       "stats": {
+-        "states": 221700,
+-        "cacheHits": 416572,
+-        "cacheMisses": 221700,
+-        "ms": 845
++        "states": 205753,
++        "cacheHits": 407642,
++        "cacheMisses": 205753,
++        "ms": 1095
+       }
+     },
+     {
+       "scenario": "hand4",
+       "ruleset": "route-v1",
+-      "version": "0.4.0",
++      "version": "0.5.0",
+       "source": "exact_dp",
+-      "configId": "route-v1-9e6f816644184d11",
++      "configId": "route-v1-aaf1d9ee2ac3176c",
+       "config": {
+         "deck": {
+           "H": 4,
+@@ -824,6 +828,7 @@
+         },
+         "handLimit": 4,
+         "digBase": 3,
++        "maxRockCost": 3,
+         "allowDig": true,
+         "forceBranch": null,
+         "goldScore": 60,
+@@ -870,7 +875,7 @@
+             ]
+           }
+         },
+-        "configId": "route-v1-9e6f816644184d11"
++        "configId": "route-v1-aaf1d9ee2ac3176c"
+       },
+       "tieOrder": "mergedByPay",
+       "ignores": [
+@@ -881,67 +886,67 @@
+         {
+           "mapId": 1,
+           "p": {
+-            "numerator": "12049151",
+-            "denominator": "30270240",
+-            "decimal": "0.398053"
++            "numerator": "64710409",
++            "denominator": "151351200",
++            "decimal": "0.427551"
+           },
+-          "expectedActions": 4.717
++          "expectedActions": 4.6826
+         },
+         {
+           "mapId": 2,
+           "p": {
+-            "numerator": "31554461",
+-            "denominator": "75675600",
+-            "decimal": "0.416970"
++            "numerator": "700897",
++            "denominator": "1544400",
++            "decimal": "0.453831"
+           },
+-          "expectedActions": 4.6386
++          "expectedActions": 4.5968
+         },
+         {
+           "mapId": 3,
+           "p": {
+-            "numerator": "2324137",
+-            "denominator": "5605600",
+-            "decimal": "0.414610"
++            "numerator": "179369",
++            "denominator": "363825",
++            "decimal": "0.493009"
+           },
+-          "expectedActions": 4.4015
++          "expectedActions": 4.0941
+         }
+       ],
+       "p": {
+-        "numerator": "23263297",
+-        "denominator": "56756700",
+-        "decimal": "0.409878"
++        "numerator": "18910529",
++        "denominator": "41277600",
++        "decimal": "0.458131"
+       },
+       "pmf": [
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "430251093928144274420627",
+-            "denominator": "548494988472219789000000",
+-            "decimal": "0.784421"
++            "numerator": "157247026805930136132511",
++            "denominator": "210991310366473728000000",
++            "decimal": "0.745277"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "23263297",
+-            "denominator": "170270100",
+-            "decimal": "0.136626"
++            "numerator": "18910529",
++            "denominator": "123832800",
++            "decimal": "0.152710"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "541180987310209",
+-            "denominator": "9663968984670000",
+-            "decimal": "0.056000"
++            "numerator": "357608107059841",
++            "denominator": "5111520785280000",
++            "decimal": "0.069961"
+           }
+         },
+         {
+           "score": 100,
+           "prob": {
+-            "numerator": "12589654038550623099073",
+-            "denominator": "548494988472219789000000",
+-            "decimal": "0.022953"
++            "numerator": "6762558479190227965889",
++            "denominator": "210991310366473728000000",
++            "decimal": "0.032051"
+           }
+         }
+       ],
+@@ -949,25 +954,25 @@
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "430251093928144274420627",
+-            "denominator": "548494988472219789000000",
+-            "decimal": "0.784421"
++            "numerator": "157247026805930136132511",
++            "denominator": "210991310366473728000000",
++            "decimal": "0.745277"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "505189687491199826750627",
+-            "denominator": "548494988472219789000000",
+-            "decimal": "0.921047"
++            "numerator": "189467547487310207172511",
++            "denominator": "210991310366473728000000",
++            "decimal": "0.897987"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "535905334433669165900927",
+-            "denominator": "548494988472219789000000",
+-            "decimal": "0.977047"
++            "numerator": "204228751887283500034111",
++            "denominator": "210991310366473728000000",
++            "decimal": "0.967949"
+           }
+         },
+         {
+@@ -980,42 +985,42 @@
+         }
+       ],
+       "E": {
+-        "numerator": "82125327730359425817313",
+-        "denominator": "5484949884722197890000",
+-        "decimal": "14.972849"
++        "numerator": "37903834407996904879169",
++        "denominator": "2109913103664737280000",
++        "decimal": "17.964642"
+       },
+       "E2": {
+-        "numerator": "11845112352886199798813",
+-        "denominator": "10969899769444395780",
+-        "decimal": "1079.783098"
++        "numerator": "27809116740469960971713",
++        "denominator": "21099131036647372800",
++        "decimal": "1318.021898"
+       },
+       "Var": {
+-        "numerator": "25740354362423379020900732643359455434234460031",
+-        "denominator": "30084675237914051922482659312320452100000000",
+-        "decimal": "855.596883"
++        "numerator": "4430781318377147688768735824474488697573869439",
++        "denominator": "4451733305016164403691035331421798400000000",
++        "decimal": "995.293522"
+       },
+       "PS": {
+-        "numerator": "118243894544075514579373",
+-        "denominator": "548494988472219789000000",
+-        "decimal": "0.215579"
++        "numerator": "53744283560543591867489",
++        "denominator": "210991310366473728000000",
++        "decimal": "0.254723"
+       },
+       "expectedActions": {
+-        "perMapAverage": 4.5857,
+-        "perGame": 6.0956
++        "perMapAverage": 4.4578,
++        "perGame": 6.1312
+       },
+       "stats": {
+-        "states": 351633,
+-        "cacheHits": 665732,
+-        "cacheMisses": 351633,
+-        "ms": 1517
++        "states": 311396,
++        "cacheHits": 623011,
++        "cacheMisses": 311396,
++        "ms": 1513
+       }
+     },
+     {
+       "scenario": "noDig",
+       "ruleset": "route-v1",
+-      "version": "0.4.0",
++      "version": "0.5.0",
+       "source": "exact_dp",
+-      "configId": "route-v1-c2b9196e81b7ec27",
++      "configId": "route-v1-8d26d5cde768e256",
+       "config": {
+         "deck": {
+           "H": 4,
+@@ -1026,6 +1031,7 @@
+         },
+         "handLimit": 5,
+         "digBase": 3,
++        "maxRockCost": 3,
+         "allowDig": false,
+         "forceBranch": null,
+         "goldScore": 60,
+@@ -1072,7 +1078,7 @@
+             ]
+           }
+         },
+-        "configId": "route-v1-c2b9196e81b7ec27"
++        "configId": "route-v1-8d26d5cde768e256"
+       },
+       "tieOrder": "mergedByPay",
+       "ignores": [
+@@ -1083,67 +1089,67 @@
+         {
+           "mapId": 1,
+           "p": {
+-            "numerator": "727619",
+-            "denominator": "1164240",
+-            "decimal": "0.624973"
++            "numerator": "3972131",
++            "denominator": "5045040",
++            "decimal": "0.787334"
+           },
+-          "expectedActions": 4.2708
++          "expectedActions": 3.8642
+         },
+         {
+           "mapId": 2,
+           "p": {
+-            "numerator": "2288471",
+-            "denominator": "3783780",
+-            "decimal": "0.604811"
++            "numerator": "163175",
++            "denominator": "216216",
++            "decimal": "0.754685"
+           },
+-          "expectedActions": 4.0275
++          "expectedActions": 3.7581
+         },
+         {
+           "mapId": 3,
+           "p": {
+-            "numerator": "73379",
+-            "denominator": "123552",
+-            "decimal": "0.593912"
++            "numerator": "591259",
++            "denominator": "864864",
++            "decimal": "0.683644"
+           },
+-          "expectedActions": 3.7885
++          "expectedActions": 3.808
+         }
+       ],
+       "p": {
+-        "numerator": "18401239",
++        "numerator": "22457117",
+         "denominator": "30270240",
+-        "decimal": "0.607899"
++        "decimal": "0.741888"
+       },
+       "pmf": [
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "49867462037554913391641",
++            "numerator": "36039975582654199676827",
+             "denominator": "83208721214156009472000",
+-            "decimal": "0.599306"
++            "decimal": "0.433127"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "18401239",
++            "numerator": "22457117",
+             "denominator": "90810720",
+-            "decimal": "0.202633"
++            "decimal": "0.247296"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "338605596735121",
++            "numerator": "504322103951689",
+             "denominator": "2748862288972800",
+-            "decimal": "0.123180"
++            "decimal": "0.183466"
+           }
+         },
+         {
+           "score": 100,
+           "prob": {
+-            "numerator": "6230762512260581214919",
++            "numerator": "11325620494129242220613",
+             "denominator": "83208721214156009472000",
+-            "decimal": "0.074881"
++            "decimal": "0.136111"
+           }
+         }
+       ],
+@@ -1151,25 +1157,25 @@
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "49867462037554913391641",
++            "numerator": "36039975582654199676827",
+             "denominator": "83208721214156009472000",
+-            "decimal": "0.599306"
++            "decimal": "0.433127"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "66728286023380099158041",
++            "numerator": "56617149596104192816027",
+             "denominator": "83208721214156009472000",
+-            "decimal": "0.801939"
++            "decimal": "0.680423"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "76977958701895428257081",
++            "numerator": "71883100720026767251387",
+             "denominator": "83208721214156009472000",
+-            "decimal": "0.925119"
++            "decimal": "0.863889"
+           }
+         },
+         {
+@@ -1182,42 +1188,42 @@
+         }
+       ],
+       "E": {
+-        "numerator": "24546995046567955953991",
++        "numerator": "35884685801337297652421",
+         "denominator": "832087212141560094720",
+-        "decimal": "29.500508"
++        "decimal": "43.126111"
+       },
+       "E2": {
+-        "numerator": "94302248307037293571043",
++        "numerator": "142518059291408436946777",
+         "denominator": "41604360607078004736",
+-        "decimal": "2266.643374"
++        "decimal": "3425.555812"
+       },
+       "Var": {
+-        "numerator": "966798932033444569709907918629260055675031119",
++        "numerator": "1084038417651573584340277660987567276647187559",
+         "denominator": "692369128609513633112080701697135371878400",
+-        "decimal": "1396.363431"
++        "decimal": "1565.694328"
+       },
+       "PS": {
+-        "numerator": "33341259176601096080359",
++        "numerator": "47168745631501809795173",
+         "denominator": "83208721214156009472000",
+-        "decimal": "0.400694"
++        "decimal": "0.566873"
+       },
+       "expectedActions": {
+-        "perMapAverage": 4.0289,
+-        "perGame": 6.158
++        "perMapAverage": 3.8101,
++        "perGame": 6.3936
+       },
+       "stats": {
+-        "states": 226694,
+-        "cacheHits": 389914,
+-        "cacheMisses": 226694,
+-        "ms": 900
++        "states": 217677,
++        "cacheHits": 386176,
++        "cacheMisses": 217677,
++        "ms": 984
+       }
+     },
+     {
+-      "scenario": "map1BHVHV",
++      "scenario": "noRockCap",
+       "ruleset": "route-v1",
+-      "version": "0.4.0",
++      "version": "0.5.0",
+       "source": "exact_dp",
+-      "configId": "route-v1-d63eb7bd91c12b40",
++      "configId": "route-v1-ead9d24aa332023f",
+       "config": {
+         "deck": {
+           "H": 4,
+@@ -1228,6 +1234,7 @@
+         },
+         "handLimit": 5,
+         "digBase": 3,
++        "maxRockCost": null,
+         "allowDig": true,
+         "forceBranch": null,
+         "goldScore": 60,
+@@ -1243,7 +1250,7 @@
+               "V"
+             ],
+             "B": [
+-              "HV",
++              "HH",
+               "HV"
+             ]
+           },
+@@ -1274,7 +1281,7 @@
+             ]
+           }
+         },
+-        "configId": "route-v1-d63eb7bd91c12b40"
++        "configId": "route-v1-ead9d24aa332023f"
+       },
+       "tieOrder": "mergedByPay",
+       "ignores": [
+@@ -1285,11 +1292,11 @@
+         {
+           "mapId": 1,
+           "p": {
+-            "numerator": "1065413",
+-            "denominator": "1681680",
+-            "decimal": "0.633541"
++            "numerator": "389017",
++            "denominator": "617760",
++            "decimal": "0.629722"
+           },
+-          "expectedActions": 3.9951
++          "expectedActions": 4.0217
+         },
+         {
+           "mapId": 2,
+@@ -1311,41 +1318,41 @@
+         }
+       ],
+       "p": {
+-        "numerator": "18493747",
+-        "denominator": "30270240",
+-        "decimal": "0.610955"
++        "numerator": "125831",
++        "denominator": "206388",
++        "decimal": "0.609682"
+       },
+       "pmf": [
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "49584938938162034868917",
+-            "denominator": "83208721214156009472000",
+-            "decimal": "0.595910"
++            "numerator": "15753845906636293",
++            "denominator": "26373913795809216",
++            "decimal": "0.597327"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "18493747",
+-            "denominator": "90810720",
+-            "decimal": "0.203652"
++            "numerator": "125831",
++            "denominator": "619164",
++            "decimal": "0.203227"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "342018678100009",
+-            "denominator": "2748862288972800",
+-            "decimal": "0.124422"
++            "numerator": "15833440561",
++            "denominator": "127788019632",
++            "decimal": "0.123904"
+           }
+         },
+         {
+           "score": 100,
+           "prob": {
+-            "numerator": "6325206902056007143723",
+-            "denominator": "83208721214156009472000",
+-            "decimal": "0.076016"
++            "numerator": "1992337659231191",
++            "denominator": "26373913795809216",
++            "decimal": "0.075542"
+           }
+         }
+       ],
+@@ -1353,25 +1360,25 @@
+         {
+           "score": 0,
+           "prob": {
+-            "numerator": "49584938938162034868917",
+-            "denominator": "83208721214156009472000",
+-            "decimal": "0.595910"
++            "numerator": "15753845906636293",
++            "denominator": "26373913795809216",
++            "decimal": "0.597327"
+           }
+         },
+         {
+           "score": 60,
+           "prob": {
+-            "numerator": "66530526841529985896117",
+-            "denominator": "83208721214156009472000",
+-            "decimal": "0.799562"
++            "numerator": "21113744006074357",
++            "denominator": "26373913795809216",
++            "decimal": "0.800554"
+           }
+         },
+         {
+           "score": 80,
+           "prob": {
+-            "numerator": "76883514312100002328277",
+-            "denominator": "83208721214156009472000",
+-            "decimal": "0.923984"
++            "numerator": "24381576136578025",
++            "denominator": "26373913795809216",
++            "decimal": "0.924458"
+           }
+         },
+         {
+@@ -1384,34 +1391,237 @@
+         }
+       ],
+       "E": {
+-        "numerator": "24774949620532790905771",
+-        "denominator": "832087212141560094720",
+-        "decimal": "29.774463"
++        "numerator": "195563555582424095",
++        "denominator": "6593478448952304",
++        "decimal": "29.660149"
+       },
+       "E2": {
+-        "numerator": "95257652642166400150487",
+-        "denominator": "41604360607078004736",
+-        "decimal": "2289.607417"
++        "numerator": "3758320961594525975",
++        "denominator": "1648369612238076",
++        "decimal": "2280.023202"
+       },
+       "Var": {
+-        "numerator": "971455363743449237345275592207654956881468359",
+-        "denominator": "692369128609513633112080701697135371878400",
+-        "decimal": "1403.088791"
++        "numerator": "60876528786036948852862724619816575",
++        "denominator": "43473958056798480504795266908416",
++        "decimal": "1400.298742"
+       },
+       "PS": {
+-        "numerator": "33623782275993974603083",
+-        "denominator": "83208721214156009472000",
+-        "decimal": "0.404090"
++        "numerator": "10620067889172923",
++        "denominator": "26373913795809216",
++        "decimal": "0.402673"
++      },
++      "expectedActions": {
++        "perMapAverage": 3.9083,
++        "perGame": 5.9811
++      },
++      "stats": {
++        "states": 331950,
++        "cacheHits": 654212,
++        "cacheMisses": 331950,
++        "ms": 1497
++      }
++    },
++    {
++      "scenario": "map1BHVHV",
++      "ruleset": "route-v1",
++      "version": "0.5.0",
++      "source": "exact_dp",
++      "configId": "route-v1-551f914455a98165",
++      "config": {
++        "deck": {
++          "H": 4,
++          "V": 4,
++          "B": 2,
++          "X": 1,
++          "R": 5
++        },
++        "handLimit": 5,
++        "digBase": 3,
++        "maxRockCost": 3,
++        "allowDig": true,
++        "forceBranch": null,
++        "goldScore": 60,
++        "coinScore": 20,
++        "maxMaps": 3,
++        "timeLimitMs": 300000,
++        "maps": {
++          "1": {
++            "first": "HH",
++            "A": [
++              "B",
++              "HV",
++              "V"
++            ],
++            "B": [
++              "HV",
++              "HV"
++            ]
++          },
++          "2": {
++            "first": "HV",
++            "A": [
++              "B",
++              "HH",
++              "H"
++            ],
++            "B": [
++              "VV",
++              "H",
++              "H"
++            ]
++          },
++          "3": {
++            "first": "B",
++            "A": [
++              "HH",
++              "VV",
++              "V"
++            ],
++            "B": [
++              "VV",
++              "B",
++              "VV"
++            ]
++          }
++        },
++        "configId": "route-v1-551f914455a98165"
++      },
++      "tieOrder": "mergedByPay",
++      "ignores": [
++        "timeout",
++        "abandon"
++      ],
++      "perMap": [
++        {
++          "mapId": 1,
++          "p": {
++            "numerator": "63097",
++            "denominator": "78624",
++            "decimal": "0.802516"
++          },
++          "expectedActions": 3.7101
++        },
++        {
++          "mapId": 2,
++          "p": {
++            "numerator": "2610109",
++            "denominator": "3363360",
++            "decimal": "0.776042"
++          },
++          "expectedActions": 3.7943
++        },
++        {
++          "mapId": 3,
++          "p": {
++            "numerator": "269081",
++            "denominator": "378378",
++            "decimal": "0.711143"
++          },
++          "expectedActions": 3.7768
++        }
++      ],
++      "p": {
++        "numerator": "34654903",
++        "denominator": "45405360",
++        "decimal": "0.763234"
++      },
++      "pmf": [
++        {
++          "score": 0,
++          "prob": {
++            "numerator": "113233909362889272134633",
++            "denominator": "280829434097776531968000",
++            "decimal": "0.403212"
++          }
++        },
++        {
++          "score": 60,
++          "prob": {
++            "numerator": "34654903",
++            "denominator": "136216080",
++            "decimal": "0.254411"
++          }
++        },
++        {
++          "score": 80,
++          "prob": {
++            "numerator": "1200962301939409",
++            "denominator": "6184940150188800",
++            "decimal": "0.194175"
++          }
++        },
++        {
++          "score": 100,
++          "prob": {
++            "numerator": "41619232080366930772327",
++            "denominator": "280829434097776531968000",
++            "decimal": "0.148201"
++          }
++        }
++      ],
++      "cdf": [
++        {
++          "score": 0,
++          "prob": {
++            "numerator": "113233909362889272134633",
++            "denominator": "280829434097776531968000",
++            "decimal": "0.403212"
++          }
++        },
++        {
++          "score": 60,
++          "prob": {
++            "numerator": "184680076351422037363433",
++            "denominator": "280829434097776531968000",
++            "decimal": "0.657624"
++          }
++        },
++        {
++          "score": 80,
++          "prob": {
++            "numerator": "239210202017409601195673",
++            "denominator": "280829434097776531968000",
++            "decimal": "0.851799"
++          }
++        },
++        {
++          "score": 100,
++          "prob": {
++            "numerator": "1",
++            "denominator": "1",
++            "decimal": "1.000000"
++          }
++        }
++      ],
++      "E": {
++        "numerator": "128111032806276640975399",
++        "denominator": "2808294340977765319680",
++        "decimal": "45.618805"
++      },
++      "E2": {
++        "numerator": "511195663112353835536643",
++        "denominator": "140414717048888265984",
++        "decimal": "3640.613134"
++      },
++      "Var": {
++        "numerator": "12299321030325099271752785839119140034857475599",
++        "denominator": "7886517105567741227167294242768932595302400",
++        "decimal": "1559.537736"
++      },
++      "PS": {
++        "numerator": "167595524734887259833367",
++        "denominator": "280829434097776531968000",
++        "decimal": "0.596788"
+       },
+       "expectedActions": {
+-        "perMapAverage": 3.8995,
+-        "perGame": 5.9729
++        "perMapAverage": 3.7604,
++        "perGame": 6.404
+       },
+       "stats": {
+-        "states": 333909,
+-        "cacheHits": 659286,
+-        "cacheMisses": 333909,
+-        "ms": 1489
++        "states": 307243,
++        "cacheHits": 643214,
++        "cacheMisses": 307243,
++        "ms": 1409
+       }
+     }
+   ]
+diff --git a/frontend/src/route-analysis-view.js b/frontend/src/route-analysis-view.js
+index 28c4dd1..9cbe343 100644
+--- a/frontend/src/route-analysis-view.js
++++ b/frontend/src/route-analysis-view.js
+@@ -23,7 +23,7 @@ function chart(result,cumulative=false) {
+   }).join('');
+   return `<svg class="probability-chart" viewBox="0 0 520 275" role="img" aria-label="route-v1 精確${cumulative?'CDF，實心包含端點、空心不含':'PMF'}，精確分數見表格"><text x="56" y="20">${cumulative?'F(x) = P(X ≤ x)':'P(X = x)'}</text>${[0,.25,.5,.75,1].map(p=>`<line x1="56" x2="490" y1="${y(p)}" y2="${y(p)}" stroke="#d0d5c3"/><text x="46" y="${y(p)+4}" text-anchor="end">${p}</text>`).join('')}<line x1="56" x2="56" y1="30" y2="218" stroke="#243c36"/><line x1="56" x2="490" y1="218" y2="218" stroke="#243c36"/>${marks}${rows.map(row=>`<text x="${x(row.score)}" y="242" text-anchor="middle">${row.score}</text>`).join('')}<text x="270" y="267" text-anchor="middle">最終得分 X（分）</text></svg>`;
+ }
+-const scenarioNames={base:'基準',rocks4:'只改落石 5→4',forceA:'固定走 A 線',forceB:'固定走 B 線',hand4:'手牌上限 5→4',noDig:'禁止硬挖',map1BHVHV:'地圖一 B 線改 HV→HV（比較用）'};
++const scenarioNames={base:'基準',rocks4:'只改落石 5→4',forceA:'固定走 A 線',forceB:'固定走 B 線',hand4:'手牌上限 5→4',noDig:'禁止硬挖',map1BHVHV:'地圖一 B 線改 HV→HV（比較用）',noRockCap:'落石不設上限（舊規則 0.4.0）'};
+ export async function mountRouteAnalysis(root,{fetcher=fetch}={}) {
+   let loading=false;
+   async function load() {
+@@ -44,7 +44,7 @@ export async function mountRouteAnalysis(root,{fetcher=fetch}={}) {
+       <p>規則 v${e(result.version)} · 配置 ${e(result.configId)} · 平手順序 mergedByPay（同付法鋪路優先）。正式地圖一 B 線為 HH→HV。</p>
+       <section class="route-analysis-cards"><div><span>單張地圖平均通關率 p</span>${fraction(result.p)}</div><div><span>整局挖到金礦 P(S)</span>${fraction(result.PS)}<strong>${percent(result.PS)}</strong></div><div><span>期望得分 E[X]（分）</span>${fraction(result.E)}</div><div><span>變異數 Var(X)（分²）</span>${fraction(result.Var)}</div></section>
+       <section><h2>模型假設與精確遞迴</h2><p>H4、V4、B2、X1、R5；每張圖重洗 16 張，抽到 5 張道路牌。地圖一／二／三各 1/3，獨立可重複。每張地圖終點是金礦的條件機率為 1/3、1/2、1。</p>
+-      <p>狀態 s＝（地圖種類、目前路段、a、手牌各類張數、牌庫各類張數）。抽到 t 的權重為 dₜ/Σd；draw(s,n)＝Σₜ[dₜ/Σd]·下一狀態價值。R 使 a+1 且 n 不減，道路牌使 n−1；best(s)＝maxₐ Q(s,a)。終點價值 1，無合法動作價值 0；岔路先補完牌再取 max(A,B)。所有機率以 BigInt 有理數運算。</p>
++      <p>狀態 s＝（地圖種類、目前路段、a、手牌各類張數、牌庫各類張數）。抽到 t 的權重為 dₜ/Σd；draw(s,n)＝Σₜ[dₜ/Σd]·下一狀態價值。R 使 a+1（a 最多 ${e(result.config.maxRockCost??'∞')}） 且 n 不減，道路牌使 n−1；best(s)＝maxₐ Q(s,a)。終點價值 1，無合法動作價值 0；岔路先補完牌再取 max(A,B)。所有機率以 BigInt 有理數運算。</p>
+       <div class="table-scroll"><table class="analysis-table"><thead><tr><th>地圖</th><th>精確通關率 pᵢ</th><th>期望動作數</th></tr></thead><tbody>${result.perMap.map(row=>`<tr><td>地圖${row.mapId}</td><td>${fraction(row.p)}</td><td>${row.expectedActions}</td></tr>`).join('')}</tbody></table></div><p>平均每張地圖 ${result.expectedActions.perMapAverage} 次動作，每局 ${result.expectedActions.perGame} 次；鋪路／硬挖／換牌各算一次，選岔路不算。</p></section>
+       <section><h2>PMF 與右連續 CDF</h2><p>p＝(p₁+p₂+p₃)/3。P(60)＝p/3；P(80)＝p²/3；P(100)＝p³/3；P(0)＝1−(p+p²+p³)/3。每張地圖重抽並重洗，這些分支不等機率。</p>
+       <div class="model-charts"><figure><figcaption>PMF：各得分的精確機率</figcaption>${chart(result)}</figure><figure><figcaption>CDF：實心包含端點，空心不含</figcaption>${chart(result,true)}</figure></div>
+diff --git a/frontend/src/route-app.js b/frontend/src/route-app.js
+index 68ba99c..11ed1be 100644
+--- a/frontend/src/route-app.js
++++ b/frontend/src/route-app.js
+@@ -9,7 +9,7 @@ import {payText,routeEffectText,playRouteEffects} from './route-effects.js';
+ 
+ const tutorial=[
+   ['三地圖探勘','每張地圖都有第一段與 A/B 岔路。找到金幣會重新抽圖、重洗牌；找到金礦才結算分數。','.route-map'],
+-  ['路段與落石','看目前路段需要哪些方向牌。落石讓這一段多付任意牌；通過路段後歸零，新抽的落石加在新位置。','.route-map'],
++  ['路段與落石','看目前路段需要哪些方向牌。落石讓這一段多付任意牌，每段最多多付 3 張；通過路段後歸零，新抽的落石加在新位置。','.route-map'],
+   ['選牌付款','點手牌或「＋」選取，點「−」取消。十字能代替一張方向牌；選好後再按鋪路或硬挖。','.route-hand'],
+   ['三種動作','鋪路付需求＋落石成本；硬挖付任意 3＋落石成本。換牌則選一張，棄掉再抽一張，牌庫須有牌。','.route-hand'],
+   ['補完牌再選路','到岔路先補完牌，再選 A 或 B。選路不算動作，累積的落石成本會帶進所選線第一段。','.route-map'],
+@@ -74,7 +74,7 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+   function start() {
+     if(!mode || !connected || busy || pending || active())return;
+     const req=routeCreateRequest(globalThis.matchMedia?.('(pointer: coarse)').matches?'touch':'pointer');
+-    return run(async()=>{await request(req.path,req.options);await current();notice=game?.a?`開局抽到 ${game.a} 張落石，第一段另付 ${game.a} 張。`:'選牌後，按鋪路、硬挖或換牌。';});
++    return run(async()=>{await request(req.path,req.options);await current();notice=game?.a?`開局抽到落石，第一段另付 ${game.a} 張（每段最多 3 張）。`:'選牌後，按鋪路、硬挖或換牌。';});
+   }
+   function submit(action) {
+     if(!playable() && !(active() && !isRoute() && action.type==='abandon' && !busy && !pending && connected))return;
+diff --git a/frontend/src/route-effects.js b/frontend/src/route-effects.js
+index be9cddb..5dff9c2 100644
+--- a/frontend/src/route-effects.js
++++ b/frontend/src/route-effects.js
+@@ -5,7 +5,7 @@ export function routeEffectText(effect) {
+   switch(effect.type) {
+     case 'map_start':return `第 ${effect.mapIndex} 張探勘：抽到地圖${effect.mapId}，重新洗牌。`;
+     case 'draw':return `補到${names[effect.card]||effect.card}牌。`;
+-    case 'rock':return `抽到落石！${location}累積加付 ${effect.a} 張任意牌。`;
++    case 'rock':return effect.capped?`抽到落石！${location}加付已達上限 ${effect.a} 張，這張不再增加。`:`抽到落石！${location}累積加付 ${effect.a} 張任意牌。`;
+     case 'pay':return `${effect.action==='dig'?'硬挖':'鋪路'}：交出${payText(effect.pay)}。`;
+     case 'exchange':return `換牌：棄掉${names[effect.discard]||effect.discard}。`;
+     case 'advance':return '前進一段，補牌中。';
+diff --git a/shared/route-analysis.js b/shared/route-analysis.js
+index eaaf525..a79f303 100644
+--- a/shared/route-analysis.js
++++ b/shared/route-analysis.js
+@@ -2,7 +2,7 @@
+ // 期望動作數依同一最佳策略與固定平手規則遞迴，用浮點數（規格允許 ±0.01）。
+ 
+ import { Rational, ZERO, ONE } from './rational.js';
+-import { SEGMENTS, ROUTE_VERSION, RULESET } from './route-config.js';
++import { SEGMENTS, ROUTE_VERSION, RULESET, addRock } from './route-config.js';
+ 
+ const H = 0, V = 1, B = 2, X = 3, R = 4;
+ // mergedByPay 是預設：只有它重現規格的參考動作數（地圖三 3.6589；paveThenDig 會得到 3.7063）。
+@@ -120,7 +120,7 @@ export class RouteSolver {
+       const d2 = deck.slice(); d2[t]--;
+       let child;
+       if (t === R) {
+-        child = this.draw(mapId, pos, a + 1, hand, d2, n);
++        child = this.draw(mapId, pos, addRock(this.config, a), hand, d2, n);
+       } else {
+         const h2 = hand.slice(); h2[t]++;
+         child = this.draw(mapId, pos, a, h2, d2, n - 1);
+diff --git a/shared/route-config.js b/shared/route-config.js
+index 30158d3..52d17f3 100644
+--- a/shared/route-config.js
++++ b/shared/route-config.js
+@@ -1,7 +1,7 @@
+ // 三地圖路段版（route-v1）的設定。地圖與路段需求是資料，不寫死在規則邏輯裡。
+ 
+ export const RULESET = 'route-v1';
+-export const ROUTE_VERSION = '0.4.0';
++export const ROUTE_VERSION = '0.5.0';
+ 
+ export const ROAD_TYPES = ['H', 'V', 'B', 'X'];
+ export const DECK_TYPES = ['H', 'V', 'B', 'X', 'R'];
+@@ -20,6 +20,9 @@ export const BASE_CONFIG = Object.freeze({
+   deck: { H: 4, V: 4, B: 2, X: 1, R: 5 },
+   handLimit: 5,
+   digBase: 3,
++  // 每一段的落石加需求 a 最多到幾張；之後再抽到的落石照樣翻開移出，但不再加需求。
++  // 3 張時最大付款為 2+3=5，不會超過手牌上限而卡死。null 表示不設上限（0.4.0 舊規則）。
++  maxRockCost: 3,
+   allowDig: true,
+   forceBranch: null,
+   goldScore: 60,
+@@ -41,6 +44,7 @@ export const SCENARIOS = {
+   forceB: { forceBranch: 'B' },
+   hand4: { handLimit: 4 },
+   noDig: { allowDig: false },
++  noRockCap: { maxRockCost: null },
+   map1BHVHV: { maps: { 1: { B: ['HV', 'HV'] } } },
+ };
+ 
+@@ -82,6 +86,7 @@ export function validateConfig(config) {
+   }
+   if (!Number.isInteger(config.handLimit) || config.handLimit < 1) errors.push('handLimit 必須是正整數');
+   if (!Number.isInteger(config.digBase) || config.digBase < 1) errors.push('digBase 必須是正整數');
++  if (config.maxRockCost !== null && (!Number.isInteger(config.maxRockCost) || config.maxRockCost < 0)) errors.push('maxRockCost 必須是非負整數或 null');
+   if (![null, 'A', 'B'].includes(config.forceBranch)) errors.push('forceBranch 必須是 null、A 或 B');
+   for (const id of ['1', '2', '3']) {
+     const map = config.maps[id];
+@@ -102,6 +107,11 @@ export function makeConfig(patch = {}) {
+   return Object.freeze({ ...merged, configId });
+ }
+ 
++// 再抽到一張落石後的 a（有上限時不超過 maxRockCost）。引擎與精算共用，確保規則一致。
++export function addRock(config, a) {
++  return config.maxRockCost === null ? a + 1 : Math.min(a + 1, config.maxRockCost);
++}
++
+ export function scenarioConfig(name) {
+   if (!(name in SCENARIOS)) throw new Error(`未知情境 ${name}；可用：${Object.keys(SCENARIOS).join(', ')}`);
+   return makeConfig(SCENARIOS[name]);
+@@ -137,6 +147,7 @@ export function publicConfig(config) {
+     deck: { ...config.deck },
+     handLimit: config.handLimit,
+     digBase: config.digBase,
++    maxRockCost: config.maxRockCost,
+     allowDig: config.allowDig,
+     goldScore: config.goldScore,
+     coinScore: config.coinScore,
+diff --git a/shared/route-engine.js b/shared/route-engine.js
+index 01242de..5ecd330 100644
+--- a/shared/route-engine.js
++++ b/shared/route-engine.js
+@@ -2,7 +2,7 @@
+ // 隱藏資訊（deck 順序、goldMapIndex、script）只存在 state，絕不經 routePublicView 外流。
+ 
+ import {
+-  RULESET, ROUTE_VERSION, ROAD_TYPES, DECK_TYPES, SEGMENTS, makeConfig, publicConfig,
++  RULESET, ROUTE_VERSION, ROAD_TYPES, DECK_TYPES, SEGMENTS, makeConfig, publicConfig, addRock,
+ } from './route-config.js';
+ import { legalActions, canPave, posToObject } from './route-analysis.js';
+ 
+@@ -96,14 +96,15 @@ function freshDeck(game, rng) {
+   return shuffle(DECK_TYPES.flatMap(t => Array(d[t]).fill(t)), rng);
+ }
+ 
+-// 抽到 n 張道路牌或牌庫空為止；每張落石讓「目前位置」a+1。
++// 抽到 n 張道路牌或牌庫空為止；每張落石讓「目前位置」a+1（最多到 maxRockCost，超過的落石只移出、capped=true）。
+ function drawRoads(game, n, now) {
+   let got = 0;
+   while (got < n && game.deck.length) {
+     const t = game.deck.shift();
+     if (t === 'R') {
+-      game.a++;
+-      record(game, 'rock', { card: 'R' }, now);
++      const before = game.a;
++      game.a = addRock(game.config, game.a);
++      record(game, 'rock', { card: 'R', capped: game.a === before }, now);
+     } else {
+       game.hand[t]++;
+       got++;
+diff --git a/tests/route-frontend.test.js b/tests/route-frontend.test.js
+index 0a37645..c39f474 100644
+--- a/tests/route-frontend.test.js
++++ b/tests/route-frontend.test.js
+@@ -204,7 +204,7 @@ test('route hints: lifecycle is recorded once, stale response cannot overwrite a
+ 
+ test('exact analysis artifact: PMF, CDF, expectation and variance remain rational and version matched',async()=>{
+   const {scenarios}=await bundle(),base=validateExact(scenarios.find(row=>row.scenario==='base'));
+-  assert.equal(scenarios.length,7);assert.equal(base.tieOrder,'mergedByPay');assert.equal(base.source,'exact_dp');
++  assert.equal(scenarios.length,8);assert.equal(base.config.maxRockCost,3);assert.equal(base.tieOrder,'mergedByPay');assert.equal(base.source,'exact_dp');
+   const q=value=>new Rational(value.numerator,value.denominator);
+   const mean=base.pmf.reduce((sum,row)=>sum.add(q(row.prob).mul(row.score)),new Rational(0));
+   const second=base.pmf.reduce((sum,row)=>sum.add(q(row.prob).mul(row.score**2)),new Rational(0));
+diff --git a/tools/route-version/tests/cli-hints.test.js b/tools/route-version/tests/cli-hints.test.js
+index db6f480..6eda501 100644
+--- a/tools/route-version/tests/cli-hints.test.js
++++ b/tools/route-version/tests/cli-hints.test.js
+@@ -16,18 +16,19 @@ test('CLI: exact JSON with string fractions, full config snapshot and reproducti
+   const out = run('--scenario', 'base', '--format', 'json');
+   assert.equal(out.source, 'exact_dp');
+   assert.equal(out.ruleset, 'route-v1');
+-  assert.equal(out.version, '0.4.0');
++  assert.equal(out.version, '0.5.0');
+   assert.match(out.configId, /^route-v1-[0-9a-f]{16}$/);
+   assert.equal(out.tieOrder, 'mergedByPay');
+   assert.deepEqual(out.ignores, ['timeout', 'abandon']);
+   assert.deepEqual(out.config.deck, { H: 4, V: 4, B: 2, X: 1, R: 5 });
+-  assert.deepEqual(out.p, { numerator: '125831', denominator: '206388', decimal: '0.609682' });
++  assert.equal(out.config.maxRockCost, 3);
++  assert.deepEqual(out.p, { numerator: '5780251', denominator: '7567560', decimal: '0.763820' });
+   for (const v of [out.E, out.E2, out.Var, out.PS, ...out.pmf.map(x => x.prob), ...out.cdf.map(x => x.prob)]) {
+     assert.match(v.numerator, fraction);
+     assert.match(v.denominator, fraction);
+   }
+   assert.deepEqual(out.pmf.map(x => x.score), [0, 60, 80, 100]);
+-  assert.equal(out.expectedActions.perGame, 5.9811);
++  assert.equal(out.expectedActions.perGame, 6.4313);
+   assert.ok(out.stats.states > 0 && out.stats.ms >= 0 && out.stats.cacheHits > 0);
+ });
+ 
+@@ -39,7 +40,9 @@ test('CLI: --set produces the same exact result as the named scenario and a diff
+   assert.notEqual(viaSet.configId, run('--scenario', 'base').configId);
+ 
+   const hv = run('--set', 'maps.1.B=HV,HV');
+-  assert.deepEqual(hv.perMap[0].p, { numerator: '1065413', denominator: '1681680', decimal: '0.633541' });
++  assert.deepEqual(hv.perMap[0].p, { numerator: '63097', denominator: '78624', decimal: '0.802516' });
++  const oldRule = run('--set', 'maxRockCost=null');
++  assert.deepEqual(oldRule.p, { numerator: '125831', denominator: '206388', decimal: '0.609682' });
+ });
+ 
+ test('CLI: unknown scenario or bad tie order fails loudly instead of returning something', () => {
+diff --git a/tools/route-version/tests/engine.test.js b/tools/route-version/tests/engine.test.js
+index 95115d7..103f1b1 100644
+--- a/tools/route-version/tests/engine.test.js
++++ b/tools/route-version/tests/engine.test.js
+@@ -191,15 +191,26 @@ test('deck of only rocks: exchange draws them all, then an unpayable hand fails
+   assert.deepEqual(types(g).slice(-2), ['map_end', 'end']);
+ });
+ 
+-test('empty deck is not failure while a payment is still possible', () => {
++test('rock cost is capped at 3: five opening rocks still leave the first segment payable (0.5.0)', () => {
+   const g = game({ decks: [deck('RRRRR' + 'HHHHV')] });
+-  assert.equal(g.a, 5);
++  assert.equal(g.a, 3, 'a stops at maxRockCost');
++  const rocks = g.events.filter(e => e.type === 'rock');
++  assert.equal(rocks.length, 5, 'all five rocks are still flipped and removed');
++  assert.deepEqual(rocks.map(e => e.capped), [false, false, false, true, true]);
++  ok(g, { type: 'pave', pay: hand(4, 1) });
++  assert.equal(g.pos, 'K', 'HH + 3 any = 5 cards: payable with a full hand');
++});
++
++test('empty deck is not failure while a payment is still possible', () => {
++  // 0.4.0 時這手牌（a=5）永遠付不出；0.5.0 上限 3 後可付。這裡改測「牌庫空才判失敗」本身。
++  const g = game({ decks: [deck('RRRRR' + 'VVVVB')] });
++  assert.equal(g.a, 3);
+   for (let i = 0; i < 6; i++) {
+     assert.equal(g.status, 'playing', `still playing before exchange ${i + 1}`);
+-    ok(g, { type: 'exchange', discard: g.hand.V ? 'V' : g.hand.B ? 'B' : 'X' });
++    ok(g, { type: 'exchange', discard: g.hand.H ? 'H' : g.hand.V ? 'V' : 'B' });
+   }
+   assert.equal(g.deck.length, 0);
+-  assert.equal(g.reason, 'exhausted', 'only now: deck empty and neither pave (7) nor dig (8) is affordable');
++  assert.equal(g.reason, 'exhausted', 'only now: deck empty, HH+3 needs two H/X and dig needs 6 cards');
+ 
+   const h = game({ decks: [deck('HHVVB')] });
+   h.deck = [];
+@@ -221,12 +232,13 @@ test('coin: full reshuffle, a new map draw, hand reset; the game clock never res
+   assert.equal(g.pos, 'F');
+   assert.equal(g.deck.length, 16 - 10, 'a fresh 16-card deck was dealt');
+   assert.deepEqual(g.hand, hand(4, 1, 0, 0));
+-  assert.equal(g.a, 5);
++  assert.equal(g.a, 3, 'rock cost capped at 3');
+   assert.equal(g.mapActionCount, 0);
+   assert.equal(g.deadlineAt, deadline);
+   assert.deepEqual(g.completedMaps, [{ mapIndex: 1, mapId: 1, branch: 'B', result: 'coin' }]);
+ 
+-  for (let i = 0; i < 6; i++) ok(g, { type: 'exchange', discard: g.hand.V ? 'V' : g.hand.B ? 'B' : 'X' });
++  // 故意一直棄掉橫／十字，牌庫抽完時付不出 HH+3 → 失敗
++  for (let i = 0; i < 6; i++) ok(g, { type: 'exchange', discard: g.hand.H ? 'H' : g.hand.X ? 'X' : g.hand.V ? 'V' : 'B' });
+   assert.equal(g.reason, 'exhausted');
+   assert.equal(g.score, 0, 'coins are not banked');
+   assert.equal(g.coins, 1);
+diff --git a/tools/route-version/tests/exact.test.js b/tools/route-version/tests/exact.test.js
+index df4f065..bd7c882 100644
+--- a/tools/route-version/tests/exact.test.js
++++ b/tools/route-version/tests/exact.test.js
+@@ -3,7 +3,7 @@ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+ 
+ import { Rational } from '../../../shared/rational.js';
+-import { makeConfig, scenarioConfig } from '../../../shared/route-config.js';
++import { makeConfig, scenarioConfig, SEGMENTS } from '../../../shared/route-config.js';
+ import { analyze, RouteSolver, initialDealDistribution } from '../../../shared/route-analysis.js';
+ 
+ const R = s => Rational.from(s);
+@@ -12,54 +12,81 @@ const near = (actual, expected, tol, label) => assert.ok(Math.abs(actual - expec
+ 
+ const base = analyze(makeConfig());
+ 
+-test('A. legacy regression: map 1 alone, deck (4,4,2,1,5) hand 5 and deck (4,4,2,1,4) hand 4', () => {
+-  eqR(new RouteSolver(makeConfig()).mapStart('1').value, '389017/617760', 'A1');
+-  eqR(new RouteSolver(makeConfig({ deck: { R: 4 }, handLimit: 4 })).mapStart('1').value, '1864894/2627625', 'A2');
++// 0.5.0 起每段落石加需求最多 3 張（maxRockCost）。原規格 A～C 的數值是「不設上限」的規則，
++// 保留在 noRockCap 情境並在下方逐項比對；基準改為新規則的精確值（另以獨立 Python 狀態遞迴交叉驗證）。
++const old = analyze(scenarioConfig('noRockCap'));
++
++test('A. legacy regression (no rock cap): map 1 alone, deck (4,4,2,1,5) hand 5 and deck (4,4,2,1,4) hand 4', () => {
++  eqR(new RouteSolver(makeConfig({ maxRockCost: null })).mapStart('1').value, '389017/617760', 'A1');
++  eqR(new RouteSolver(makeConfig({ deck: { R: 4 }, handLimit: 4, maxRockCost: null })).mapStart('1').value, '1864894/2627625', 'A2');
+ });
+ 
+-test('B. baseline exact p_i, p, PMF, E and Var', () => {
+-  const [p1, p2, p3] = base.perMap.map(m => m.p);
++test('B. original spec values are reproduced exactly with the rock cap removed (noRockCap)', () => {
++  const [p1, p2, p3] = old.perMap.map(m => m.p);
+   eqR(p1, '389017/617760', 'p1');
+   eqR(p2, '4577077/7567560', 'p2');
+   eqR(p3, '17995499/30270240', 'p3');
+-  eqR(base.p, '125831/206388', 'p');
+-
+-  const pmf = Object.fromEntries(base.pmf.map(x => [Number(x.score), x.prob]));
++  eqR(old.p, '125831/206388', 'p');
++  const pmf = Object.fromEntries(old.pmf.map(x => [Number(x.score), x.prob]));
+   eqR(pmf[0], '15753845906636293/26373913795809216', 'P(X=0)');
+   eqR(pmf[60], '125831/619164', 'P(X=60)');
+   eqR(pmf[80], '15833440561/127788019632', 'P(X=80)');
+   eqR(pmf[100], '1992337659231191/26373913795809216', 'P(X=100)');
++  eqR(old.E, '195563555582424095/6593478448952304', 'E');
++  eqR(old.Var, '60876528786036948852862724619816575/43473958056798480504795266908416', 'Var');
++  const [a1, a2, a3] = old.perMap.map(m => m.expectedActions);
++  near(a1, 4.0217, 0.01, 'actions map 1');
++  near(a2, 4.0444, 0.01, 'actions map 2');
++  near(a3, 3.6589, 0.01, 'actions map 3');
++  near(old.gameActions, 5.9811, 0.01, 'actions per game');
++});
++
++test('B. baseline (rock cost capped at 3): exact p_i, p, PMF, E and Var', () => {
++  const [p1, p2, p3] = base.perMap.map(m => m.p);
++  eqR(p1, '24345551/30270240', 'p1');
++  eqR(p2, '2610109/3363360', 'p2');
++  eqR(p3, '269081/378378', 'p3');
++  eqR(base.p, '5780251/7567560', 'p');
++
++  const pmf = Object.fromEntries(base.pmf.map(x => [Number(x.score), x.prob]));
++  eqR(pmf[0], '523145321420516293589/1300136268971187648000', 'P(X=0)');
++  eqR(pmf[60], '5780251/22702680', 'P(X=60)');
++  eqR(pmf[80], '33411301623001/171803893060800', 'P(X=80)');
++  eqR(pmf[100], '193125709617653153251/1300136268971187648000', 'P(X=100)');
++  eqR(pmf[60], base.p.div(R('3')), 'P(X=60)=p/3');
+   eqR(base.pmf.reduce((s, x) => s.add(x.prob), R('0')), '1', 'PMF sums to 1');
+ 
+-  eqR(base.E, '195563555582424095/6593478448952304', 'E');
+-  eqR(base.Var, '60876528786036948852862724619816575/43473958056798480504795266908416', 'Var');
++  eqR(base.E, '594013258319495563459/13001362689711876480', 'E');
++  eqR(base.Var, '263559708496530623997316749253650332294519/169035431789432039334004077562777190400', 'Var');
+ });
+ 
+ test('B. baseline derived values: E2, P(S), CDF and expected actions', () => {
+-  near(base.E2.toNumber(), 2280.0232, 5e-5, 'E2');
+-  near(base.PS.toNumber(), 0.402673, 5e-7, 'P(S)');
++  near(base.E2.toNumber(), 3646.6405, 5e-4, 'E2');
++  near(base.PS.toNumber(), 0.597623, 5e-7, 'P(S)');
+   eqR(base.PS, base.pmf.filter(x => x.score > 0n).reduce((s, x) => s.add(x.prob), R('0')), 'P(S)=P(X>0)');
+   const cdf = Object.fromEntries(base.cdf.map(x => [Number(x.score), x.prob.toNumber()]));
+-  near(cdf[0], 0.597327, 5e-7, 'F(0)');
+-  near(cdf[60], 0.800554, 5e-7, 'F(60)');
+-  near(cdf[80], 0.924458, 5e-7, 'F(80)');
++  near(cdf[0], 0.402377, 5e-7, 'F(0)');
++  near(cdf[60], 0.656984, 5e-7, 'F(60)');
++  near(cdf[80], 0.851457, 5e-7, 'F(80)');
+   eqR(base.cdf.at(-1).prob, '1', 'F(100)');
+ 
+   const [a1, a2, a3] = base.perMap.map(m => m.expectedActions);
+-  near(a1, 4.0217, 0.01, 'actions map 1');
+-  near(a2, 4.0444, 0.01, 'actions map 2');
+-  near(a3, 3.6589, 0.01, 'actions map 3');
+-  near(base.avgActions, 3.9083, 0.01, 'actions per map');
+-  near(base.gameActions, 5.9811, 0.01, 'actions per game');
++  near(a1, 3.7536, 0.01, 'actions map 1');
++  near(a2, 3.7943, 0.01, 'actions map 2');
++  near(a3, 3.7768, 0.01, 'actions map 3');
++  near(base.avgActions, 3.7749, 0.01, 'actions per map');
++  near(base.gameActions, 6.4313, 0.01, 'actions per game');
+ });
+ 
+ const C = {
+-  rocks4: { p: ['158021/171990', '1477877/1576575', '4314851/4729725', '2909791/3153150'], E: 67.36, Var: 1006.14, PS: 0.8534 },
+-  forceA: { p: ['18059617/30270240', '3044221/6054048', '390955/756756', '1881497/3492720'], E: 23.72, Var: 1223.79, PS: 0.3284 },
+-  forceB: { p: ['32435/77616', '5561737/10090080', '214793/432432', '44370371/90810720'], E: 20.03, Var: 1083.38, PS: 0.2813 },
+-  hand4: { p: ['12049151/30270240', '31554461/75675600', '2324137/5605600', '23263297/56756700'], E: 14.97, Var: 855.60, PS: 0.2156 },
+-  noDig: { p: ['727619/1164240', '2288471/3783780', '73379/123552', '18401239/30270240'], E: 29.50, Var: 1396.36, PS: 0.4007 },
+-  map1BHVHV: { p: ['1065413/1681680', '4577077/7567560', '17995499/30270240', '18493747/30270240'], E: 29.77, Var: 1403.09, PS: 0.4041 },
++  rocks4: { p: ['3109/3185', '9368323/9459450', '2905817/3153150', '13659752/14189175'], E: 73.71, Var: 673.54, PS: 0.9272 },
++  forceA: { p: ['324437/432432', '20095469/30270240', '914513/1441440', '298129/436590'], E: 36.71, Var: 1528.28, PS: 0.4892 },
++  forceB: { p: ['347211/560560', '7173077/10090080', '405959/630630', '19918219/30270240'], E: 34.20, Var: 1493.13, PS: 0.4586 },
++  hand4: { p: ['64710409/151351200', '700897/1544400', '179369/363825', '18910529/41277600'], E: 17.96, Var: 995.29, PS: 0.2547 },
++  noDig: { p: ['3972131/5045040', '163175/216216', '591259/864864', '22457117/30270240'], E: 43.13, Var: 1565.69, PS: 0.5669 },
++  map1BHVHV: { p: ['63097/78624', '2610109/3363360', '269081/378378', '34654903/45405360'], E: 45.62, Var: 1559.54, PS: 0.5968 },
++  // 舊規則（不設上限）＝原規格基準
++  noRockCap: { p: ['389017/617760', '4577077/7567560', '17995499/30270240', '125831/206388'], E: 29.66, Var: 1400.30, PS: 0.4027 },
+ };
+ 
+ for (const [name, expected] of Object.entries(C)) {
+@@ -73,6 +100,12 @@ for (const [name, expected] of Object.entries(C)) {
+   });
+ }
+ 
++test('rock cap: the required payment never exceeds the hand limit, so no segment is impossible by card count', () => {
++  const config = makeConfig();
++  const worst = Math.max(...Object.values(SEGMENTS).map(n => n.H + n.V + n.B)) + config.maxRockCost;
++  assert.ok(worst <= config.handLimit, `worst payment ${worst} ≤ hand limit ${config.handLimit}`);
++});
++
+ test('D. opening hand H count is HG(11,4,5) and the no-rock probability is C(11,5)/C(16,5)', () => {
+   const dist = initialDealDistribution(makeConfig());
+   const byH = [0, 1, 2, 3, 4].map(() => R('0'));
+@@ -91,9 +124,9 @@ test('D. opening hand H count is HG(11,4,5) and the no-rock probability is C(11,
+   eqR(noRock, '462/4368', 'no rock while dealing');
+ });
+ 
+-test('tie order only changes expected actions: pave-then-dig gives map 3 ≈ 3.7063, not the reference 3.6589', () => {
+-  const alt = analyze(makeConfig(), { tieOrder: 'paveThenDig' });
+-  alt.perMap.forEach((m, i) => assert.ok(m.p.eq(base.perMap[i].p), 'pass rates are independent of the tie order'));
++test('tie order only changes expected actions: pave-then-dig gives map 3 ≈ 3.7063, not the reference 3.6589 (no rock cap)', () => {
++  const alt = analyze(scenarioConfig('noRockCap'), { tieOrder: 'paveThenDig' });
++  alt.perMap.forEach((m, i) => assert.ok(m.p.eq(old.perMap[i].p), 'pass rates are independent of the tie order'));
+   near(alt.perMap[2].expectedActions, 3.7063, 0.001, 'paveThenDig map 3');
+   assert.ok(Math.abs(alt.perMap[2].expectedActions - 3.6589) > 0.01, 'paveThenDig does not reproduce the reference');
+ });
+diff --git a/tools/route-version/validation/simulation.test.js b/tools/route-version/validation/simulation.test.js
+index f127105..01149c5 100644
+--- a/tools/route-version/validation/simulation.test.js
++++ b/tools/route-version/validation/simulation.test.js
+@@ -27,7 +27,9 @@ test('100,000 whole games: map pass rate and simulated PMF agree with the exact
+   const { mapPassRate: r } = sim;
+   console.log(`games=${sim.games} maps=${sim.maps} p̂=${r.estimate.toFixed(4)} [${r.low.toFixed(4)}, ${r.high.toFixed(4)}] exact ${pExact.toFixed(4)}`);
+   console.log(`PMF ${JSON.stringify(sim.pmf)}  actions/game ${sim.meanActionsPerGame.toFixed(4)}`);
+-  assert.ok(r.low <= pExact && pExact <= r.high);
++  // 與下方 PMF 檢查一致採 4 個標準誤（0.5.0：此 seed 下 z≈2.5，另以 4 個其他 seed 共 40 萬局得 z≈0.05）。
++  const seP = Math.sqrt((pExact * (1 - pExact)) / r.n);
++  assert.ok(Math.abs(r.estimate - pExact) < 4 * seP, `map pass rate ${r.estimate} vs exact ${pExact}`);
+ 
+   const p = pExact;
+   const model = { 0: 1 - (p + p * p + p ** 3) / 3, 60: p / 3, 80: (p * p) / 3, 100: p ** 3 / 3 };
+@@ -35,5 +37,5 @@ test('100,000 whole games: map pass rate and simulated PMF agree with the exact
+     const se = Math.sqrt((model[score] * (1 - model[score])) / sim.games);
+     assert.ok(Math.abs(prob - model[score]) < 4 * se, `P(X=${score}) sim ${prob} vs exact ${model[score]}`);
+   }
+-  assert.ok(Math.abs(sim.meanActionsPerGame - 5.9811) < 0.05);
++  assert.ok(Math.abs(sim.meanActionsPerGame - 6.4313) < 0.05);
+ });
+-- 
+2.43.0
+

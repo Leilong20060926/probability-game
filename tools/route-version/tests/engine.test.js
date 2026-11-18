@@ -191,15 +191,26 @@ test('deck of only rocks: exchange draws them all, then an unpayable hand fails 
   assert.deepEqual(types(g).slice(-2), ['map_end', 'end']);
 });
 
-test('empty deck is not failure while a payment is still possible', () => {
+test('rock cost is capped at 3: five opening rocks still leave the first segment payable (0.5.0)', () => {
   const g = game({ decks: [deck('RRRRR' + 'HHHHV')] });
-  assert.equal(g.a, 5);
+  assert.equal(g.a, 3, 'a stops at maxRockCost');
+  const rocks = g.events.filter(e => e.type === 'rock');
+  assert.equal(rocks.length, 5, 'all five rocks are still flipped and removed');
+  assert.deepEqual(rocks.map(e => e.capped), [false, false, false, true, true]);
+  ok(g, { type: 'pave', pay: hand(4, 1) });
+  assert.equal(g.pos, 'K', 'HH + 3 any = 5 cards: payable with a full hand');
+});
+
+test('empty deck is not failure while a payment is still possible', () => {
+  // 0.4.0 時這手牌（a=5）永遠付不出；0.5.0 上限 3 後可付。這裡改測「牌庫空才判失敗」本身。
+  const g = game({ decks: [deck('RRRRR' + 'VVVVB')] });
+  assert.equal(g.a, 3);
   for (let i = 0; i < 6; i++) {
     assert.equal(g.status, 'playing', `still playing before exchange ${i + 1}`);
-    ok(g, { type: 'exchange', discard: g.hand.V ? 'V' : g.hand.B ? 'B' : 'X' });
+    ok(g, { type: 'exchange', discard: g.hand.H ? 'H' : g.hand.V ? 'V' : 'B' });
   }
   assert.equal(g.deck.length, 0);
-  assert.equal(g.reason, 'exhausted', 'only now: deck empty and neither pave (7) nor dig (8) is affordable');
+  assert.equal(g.reason, 'exhausted', 'only now: deck empty, HH+3 needs two H/X and dig needs 6 cards');
 
   const h = game({ decks: [deck('HHVVB')] });
   h.deck = [];
@@ -221,12 +232,13 @@ test('coin: full reshuffle, a new map draw, hand reset; the game clock never res
   assert.equal(g.pos, 'F');
   assert.equal(g.deck.length, 16 - 10, 'a fresh 16-card deck was dealt');
   assert.deepEqual(g.hand, hand(4, 1, 0, 0));
-  assert.equal(g.a, 5);
+  assert.equal(g.a, 3, 'rock cost capped at 3');
   assert.equal(g.mapActionCount, 0);
   assert.equal(g.deadlineAt, deadline);
   assert.deepEqual(g.completedMaps, [{ mapIndex: 1, mapId: 1, branch: 'B', result: 'coin' }]);
 
-  for (let i = 0; i < 6; i++) ok(g, { type: 'exchange', discard: g.hand.V ? 'V' : g.hand.B ? 'B' : 'X' });
+  // 故意一直棄掉橫／十字，牌庫抽完時付不出 HH+3 → 失敗
+  for (let i = 0; i < 6; i++) ok(g, { type: 'exchange', discard: g.hand.H ? 'H' : g.hand.X ? 'X' : g.hand.V ? 'V' : 'B' });
   assert.equal(g.reason, 'exhausted');
   assert.equal(g.score, 0, 'coins are not banked');
   assert.equal(g.coins, 1);

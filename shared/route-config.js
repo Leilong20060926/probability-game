@@ -1,7 +1,7 @@
 // 三地圖路段版（route-v1）的設定。地圖與路段需求是資料，不寫死在規則邏輯裡。
 
 export const RULESET = 'route-v1';
-export const ROUTE_VERSION = '0.4.0';
+export const ROUTE_VERSION = '0.5.0';
 
 export const ROAD_TYPES = ['H', 'V', 'B', 'X'];
 export const DECK_TYPES = ['H', 'V', 'B', 'X', 'R'];
@@ -20,6 +20,9 @@ export const BASE_CONFIG = Object.freeze({
   deck: { H: 4, V: 4, B: 2, X: 1, R: 5 },
   handLimit: 5,
   digBase: 3,
+  // 每一段的落石加需求 a 最多到幾張；之後再抽到的落石照樣翻開移出，但不再加需求。
+  // 3 張時最大付款為 2+3=5，不會超過手牌上限而卡死。null 表示不設上限（0.4.0 舊規則）。
+  maxRockCost: 3,
   allowDig: true,
   forceBranch: null,
   goldScore: 60,
@@ -41,6 +44,7 @@ export const SCENARIOS = {
   forceB: { forceBranch: 'B' },
   hand4: { handLimit: 4 },
   noDig: { allowDig: false },
+  noRockCap: { maxRockCost: null },
   map1BHVHV: { maps: { 1: { B: ['HV', 'HV'] } } },
 };
 
@@ -82,6 +86,7 @@ export function validateConfig(config) {
   }
   if (!Number.isInteger(config.handLimit) || config.handLimit < 1) errors.push('handLimit 必須是正整數');
   if (!Number.isInteger(config.digBase) || config.digBase < 1) errors.push('digBase 必須是正整數');
+  if (config.maxRockCost !== null && (!Number.isInteger(config.maxRockCost) || config.maxRockCost < 0)) errors.push('maxRockCost 必須是非負整數或 null');
   if (![null, 'A', 'B'].includes(config.forceBranch)) errors.push('forceBranch 必須是 null、A 或 B');
   for (const id of ['1', '2', '3']) {
     const map = config.maps[id];
@@ -100,6 +105,11 @@ export function makeConfig(patch = {}) {
   validateConfig(merged);
   const configId = `${RULESET}-${fnv1a64(canonical(merged))}`;
   return Object.freeze({ ...merged, configId });
+}
+
+// 再抽到一張落石後的 a（有上限時不超過 maxRockCost）。引擎與精算共用，確保規則一致。
+export function addRock(config, a) {
+  return config.maxRockCost === null ? a + 1 : Math.min(a + 1, config.maxRockCost);
 }
 
 export function scenarioConfig(name) {
@@ -137,6 +147,7 @@ export function publicConfig(config) {
     deck: { ...config.deck },
     handLimit: config.handLimit,
     digBase: config.digBase,
+    maxRockCost: config.maxRockCost,
     allowDig: config.allowDig,
     goldScore: config.goldScore,
     coinScore: config.coinScore,
