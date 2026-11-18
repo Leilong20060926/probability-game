@@ -64,6 +64,8 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
   }
   async function initialize() {
     player=await request('/api/players',{body:{}});await current();
+    // 上一局已結束時不帶回結果視窗，否則一進記錄模式就像「開局先死一次」。
+    if(game?.status==='finished')game=null;
     if(isRoute() && active()){
       const path=`/api/games/${game.id}/lifecycle`;
       if(restoreRequest?.path!==path)restoreRequest=lifecycleRequest(game,'restored');
