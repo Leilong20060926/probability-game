@@ -11,7 +11,7 @@ import {
 import { verifyPassword } from '../password.js';
 import { checkRateLimit, recordAttempt, resetRateLimit } from '../ratelimit.js';
 import {
-  listGames, gameStats, exportGameRows, exportEventRows,
+  listGames, gameStats, exportGameRows, exportEventRows, deleteGameRecord,
   FILTER_KEYS, GAME_CSV_COLUMNS, EVENT_CSV_COLUMNS,
 } from '../admin-repo.js';
 import { toCsv } from '../csv.js';
@@ -36,6 +36,11 @@ function clientIp(req) {
 }
 
 export function registerAdminRoutes(routes, db) {
+  routes.push({
+    method:'DELETE',
+    pattern:/^\/api\/admin\/games\/(?<id>[^/]+)$/,
+    handler:(req,res,params)=>sendJson(res,200,deleteGameRecord(db,params.id)),
+  });
   routes.push({
     method: 'POST',
     pattern: /^\/api\/admin\/login$/,

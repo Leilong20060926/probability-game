@@ -42,5 +42,5 @@ export function mapMarkup(game,config,{canChoose=false}={}) {
 export function handMarkup(hand,selected,enabled) {
   return CARD_TYPES.map(t=>`<div class="route-card ${selected[t]?'is-selected':''}"><button type="button" data-card="${t}" aria-label="選一張${CARD_NAMES[t]}牌，已選 ${selected[t]}，手上 ${hand[t]}" ${!enabled || selected[t]>=hand[t]?'disabled':''}>
     <img src="/assets/cards/${CARD_IMAGES[t]}.png" alt=""><strong>${CARD_NAMES[t]} <small>×${hand[t]}</small></strong></button>
-    <div class="route-card-count"><button type="button" data-remove="${t}" aria-label="取消一張${CARD_NAMES[t]}牌" ${!enabled || !selected[t]?'disabled':''}>−</button><span>已選 ${selected[t]}</span><button type="button" data-card="${t}" aria-label="再選一張${CARD_NAMES[t]}牌" ${!enabled || selected[t]>=hand[t]?'disabled':''}>＋</button></div></div>`).join('');
+    <div class="route-card-count"><button type="button" data-remove="${t}" aria-label="取消一張${CARD_NAMES[t]}牌" ${!enabled || !selected[t]?'disabled':''}>−</button><span aria-label="已選 ${selected[t]} 張"><span class="route-selected-label">已選 </span>${selected[t]}</span><button type="button" data-card="${t}" aria-label="再選一張${CARD_NAMES[t]}牌" ${!enabled || selected[t]>=hand[t]?'disabled':''}>＋</button></div></div>`).join('');
 }

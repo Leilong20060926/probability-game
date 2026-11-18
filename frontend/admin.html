@@ -8,20 +8,15 @@
   <p id="status" role="status" aria-live="polite"></p>
   <section id="records">
     <form id="filters">
-      <label>規則 <select name="ruleset"><option value="">全部</option><option value="route-v1">三地圖路段版</option><option value="grid">舊版 grid</option></select></label>
-      <label>版本 <input name="version"></label>
       <label>配置 ID <input name="configId"></label>
-      <label>來源 <select name="source"><option value="">全部</option><option>human</option></select></label>
       <label>模式 <select name="mode"><option value="">全部</option><option>server</option><option>local</option><option>unverified_local</option></select></label>
-      <label>狀態 <select name="status"><option value="">全部</option><option value="playing">進行中</option><option value="finished">已結束</option></select></label>
       <label>結束原因 <select name="reason"><option value="">全部</option><option value="gold">金礦</option><option value="timeout">超時</option><option value="exhausted">耗盡</option><option value="abandoned">提前結束</option></select></label>
       <button>套用篩選／重新整理</button>
-      <button type="button" id="formal">只看正式三地圖版與模型比較</button>
     </form>
     <div id="stats"></div>
     <p><button data-export="export">下載局次 CSV</button> <button data-export="events">下載事件 CSV</button></p>
     <p id="page-info"></p>
-    <div class="table-scroll"><table><thead><tr><th>遊戲</th><th>玩家</th><th>次數</th><th>規則／版本／配置</th><th>地圖進度</th><th>狀態</th><th>結束原因</th><th>分數</th><th>動作數</th><th>耗時（秒）</th></tr></thead><tbody id="games"></tbody></table></div>
+    <div class="table-scroll"><table><thead><tr><th>遊戲</th><th>玩家</th><th>次數</th><th>規則／版本／配置</th><th>地圖進度</th><th>狀態</th><th>結束原因</th><th>分數</th><th>動作數</th><th>耗時（秒）</th><th class="record-operation">操作</th></tr></thead><tbody id="games"></tbody></table></div>
     <p><button id="previous">上一頁</button> <button id="next">下一頁</button></p>
   </section>
 </main><script type="module" src="/src/admin.js"></script>

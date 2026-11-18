@@ -8,9 +8,9 @@ export class ApiError extends Error {
     this.game = payload?.game;
   }
 }
-export async function api(path, {body, headers = {}, keepalive = false, raw = false} = {}) {
+export async function api(path, {body, method, headers = {}, keepalive = false, raw = false} = {}) {
   const response = await fetch(path, {
-    method: body === undefined ? 'GET' : 'POST',
+    method: method ?? (body === undefined ? 'GET' : 'POST'),
     credentials: 'same-origin', cache: 'no-store',
     signal: AbortSignal.timeout(15000), keepalive,
     headers: {'Content-Type':'application/json', ...headers},

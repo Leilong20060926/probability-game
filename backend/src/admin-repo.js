@@ -9,6 +9,25 @@ const FILTER_COLUMNS = {
   reason: 'reason',
 };
 
+// Explicit user decision: deletion is public, like aggregate reads. Keep all
+// effects atomic; a lost create response must never replay a deleted game.
+export function deleteGameRecord(db,gameId) {
+  db.exec('BEGIN');
+  try {
+    const game=db.prepare('SELECT player_id FROM games WHERE id = ?').get(gameId);
+    if(game) {
+      db.prepare(`UPDATE idempotency_keys SET status_code = 410, response_json = ?
+        WHERE scope = 'create-game' AND owner_id = ? AND json_extract(response_json, '$.id') = ?`)
+        .run(JSON.stringify({error:{code:'GAME_DELETED',message:'本局已刪除，請重新開始'}}),game.player_id,gameId);
+      db.prepare("DELETE FROM idempotency_keys WHERE owner_id = ? AND scope IN ('action','lifecycle')").run(gameId);
+      db.prepare('DELETE FROM events WHERE game_id = ?').run(gameId);
+      db.prepare('DELETE FROM games WHERE id = ?').run(gameId);
+    }
+    db.exec('COMMIT');
+    return {deleted:true,gameId};
+  }catch(error){db.exec('ROLLBACK');throw error;}
+}
+
 export const FILTER_KEYS = Object.keys(FILTER_COLUMNS);
 
 function buildWhere(filters, prefix = '') {

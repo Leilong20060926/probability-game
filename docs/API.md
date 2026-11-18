@@ -298,3 +298,11 @@ JSON：`ruleset, version, source: "exact_dp", configId, config（完整快照）
 - 使用者已確認 mergedByPay 為正式精算平手順序。正式設定維持三張上限、地圖一 B 線 HH→HV、嚴格 300 秒截止。
 - 新前端每個變更請求都帶去重識別碼；回應遺失時重試沿用原請求。重放的 game 可能落後其他變更，故每次確認後再 GET current；revision 衝突會清除選牌並同步，不切回試玩。
 - 開提示先送帶 eventId 的 hint_shown、GET current 取得新 revision，再讀 hints；畫面只接受目前 gameId／revision／configId 相符的結果。刷新已打開的提示不重複記開啟事件。
+
+## 紀錄刪除與篩選簡化（使用者 2026-11-18 確認，已實作）
+
+- 紀錄頁移除 ruleset／version／status／source 四個篩選與「只看正式三地圖版」快捷篩選，保留 configId／mode／reason；列表仍標示各筆規則、版本、配置與狀態。後端原本的讀取篩選參數保留相容；新版前端不送出被移除的四項。混合資料不與單一模型直接對照，精確分析仍在模型頁。
+- 新增 `DELETE /api/admin/games/:id`，**使用者明確決定任何人皆可刪除，不需登入**。不需 body 或 Idempotency-Key；以遊戲 id 為唯一刪除目標，不受列表篩選影響。回 `200 { "deleted": true, "gameId": "…" }`，不存在／已刪除的 id 也回相同成功結果，支援回應遺失後安全重試。
+- 永久刪除該筆 games 與相關 events、action／lifecycle 冪等回應，整組操作在同一 SQLite 交易內完成。該局的 create-game 快取改成不含遊戲資料的 `410 { error: { code: "GAME_DELETED", message: "本局已刪除，請重新開始" } }`，保留原 key／hash，防止舊建局重送回傳已刪除狀態或意外建立另一局。
+- 保留玩家、session、重玩計數與其他局；不重排 attempt。刪除進行中的局後，該局不能繼續操作（原 actions／hints／lifecycle 以找不到遊戲回 404）；GET current 會回目前玩家最新的剩餘局，無局則 204。前端可同步後以新建局 key 重新開始。
+- 列表每列右側提供刪除按鈕，先確認永久刪除與相關事件；進行中的紀錄另提醒無法繼續。伺服器成功後才重新查列表／stats，空尾頁回到有效頁碼。未確認的網路錯誤不顯示刪除成功，不在前端樂觀藏列。之後的 games.csv／events.csv 自動不包含被刪除資料。

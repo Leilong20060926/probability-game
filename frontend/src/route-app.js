@@ -6,6 +6,7 @@ import {createRouteTrial} from './route-trial.js';
 import {createLocalAdvisor} from './route-advisor.js';
 import {mapMarkup,handMarkup,CARD_TYPES,CARD_NAMES,emptyPay,total} from './route-view.js';
 import {payText,routeEffectText,playRouteEffects} from './route-effects.js';
+import {mountViewportFit} from './route-fit.js';
 
 const tutorial=[
   ['三地圖探勘','每張地圖都有第一段與 A/B 岔路。找到金幣會重新抽圖、重洗牌；找到金礦才結算分數。','.route-map'],
@@ -20,6 +21,7 @@ const reasons={gold:'成功找到金礦',exhausted:'牌已用盡，無法通過�
 
 export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTrial,advisor=createLocalAdvisor(),clock=()=>performance.now(),interval=setInterval,wait,reducedMotion=()=>globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches,confirm=message=>globalThis.confirm(message)}={}) {
   const config=publicConfig(makeConfig());
+  const viewportFit=mountViewportFit(app);
   let mode=null,trial=null,game=null,player={nextAttempt:1},selected=emptyPay(),connected=false,busy=false,pending=null,notice='';
   let serverTime=0,receivedAt=0,restoreRequest=null,effect=null,helpStep=0,resultHidden=false;
   let hintOpen=false,hintLoading=false,hints=null,hintError='',hintToken=0;
@@ -159,20 +161,21 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
     app.querySelectorAll('[data-remove]').forEach(button=>{button.dataset.key='remove-'+button.dataset.remove;button.onclick=()=>select(button.dataset.remove,-1);});
     app.querySelectorAll('[data-hint]').forEach(button=>button.onclick=()=>applyHint(Number(button.dataset.hint)));
     app.querySelectorAll('[data-action]').forEach(button=>{button.dataset.key=button.dataset.action;button.onclick=()=>handle(button.dataset.action);});
+    viewportFit.update();
     const viewport=app.querySelector('.route-map-viewport');
     if(viewport){
       viewport.scrollLeft=previousPan;
       const key=view?[view.id,view.mapIndex,view.position.kind,view.position.index].join(':'):'preview';
       if(key!==mapFocusKey){
         const target=viewport.querySelector('[aria-current="step"]');
-        if(target){const bounds=target.getBoundingClientRect(),frame=viewport.getBoundingClientRect();viewport.scrollLeft+=(bounds.left+bounds.width/2)-(frame.left+frame.width/2);}
+        if(target){const bounds=target.getBoundingClientRect(),frame=viewport.getBoundingClientRect(),scale=frame.width/viewport.clientWidth||1;viewport.scrollLeft+=((bounds.left+bounds.width/2)-(frame.left+frame.width/2))/scale;}
         else viewport.scrollLeft=0;
         mapFocusKey=key;
       }
     }
     if(helpStep>=0)app.querySelector(tutorial[helpStep][2])?.classList.add('route-tour-focus');
-    if(previous)app.querySelector(`[data-key="${previous}"]`)?.focus();
-    if(route && game.status==='finished' && !resultHidden && helpStep<0)app.querySelector('.route-result')?.focus();
+    if(previous)app.querySelector(`[data-key="${previous}"]`)?.focus({preventScroll:true});
+    if(route && game.status==='finished' && !resultHidden && helpStep<0)app.querySelector('.route-result')?.focus({preventScroll:true});
   }
   function handle(action) {
     switch(action){

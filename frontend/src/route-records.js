@@ -9,7 +9,7 @@ const value=n=>n==null?'—':Number(n).toFixed(2);
 export function recordsStatsMarkup(stats,filters,model=null) {
   const maps=stats.maps||{played:0,passed:0,passRate:null,byMapId:{}};
   if(model){try{validateExact(model);}catch{model=null;}}
-  let comparison='<p>請按「只看正式三地圖版與模型比較」，避免把不同規則、版本或配置混在一起。</p>';
+  let comparison='<p>不同規則與版本的紀錄保留各自的標示；精確模型請至「模型與機率分析」查看，此處不將混合紀錄直接與模型對照。</p>';
   if(matchesFormal(filters)) {
     if(model) {
       comparison=`<h2>實測與精確模型（描述性並列）</h2><p>來源 exact_dp；實測分母為已結束 ${e(stats.finished)} 局，包含超時、提前結束與玩家策略。理論忽略超時與放棄；這不是兩組條件相同的驗證。</p>
