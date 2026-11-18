@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -8,18 +9,23 @@
   <link rel="stylesheet" href="/src/style.css">
   <link rel="stylesheet" href="/src/route.css">
 </head>
+
 <body class="route-workspace">
   <nav class="workspace-nav" aria-label="頁面切換">
     <button data-view="game" aria-pressed="true">礦坑遊戲</button>
     <button data-view="records" aria-pressed="false">紀錄與統計</button>
     <button data-view="analysis" aria-pressed="false">模型與機率分析</button>
+    <button data-view="feedback" aria-pressed="false">用戶回饋</button>
+
   </nav>
   <div id="app"></div>
   <section id="records-view" class="workspace-view records-shell" hidden aria-label="資料記錄情形">
     <iframe id="records-frame" title="資料紀錄與統計"></iframe>
   </section>
   <section id="analysis-view" class="workspace-view" hidden aria-label="模型與機率分析"></section>
-  <script type="module" src="/src/route-main.js"></script>
+  <section id="feedback-view" class="workspace-view" hidden aria-label="用戶回饋"></section>
+  <script type="module" src="/src/route-main.js?v=score-captions-2"></script>
   <script type="module" src="/src/route-workspace.js"></script>
 </body>
+
 </html>

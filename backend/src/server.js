@@ -13,6 +13,8 @@ import { registerGameRoutes } from './routes/games.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerRouteAnalysisRoutes } from './routes/route-analysis.js';
 
+import { registerFeedbackRoutes } from './feedback.js';
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const frontendRoot = path.resolve(here, '..', '..', 'frontend');
 const sharedRoot = path.resolve(here, '..', '..', 'shared');
@@ -38,6 +40,8 @@ export function createServer(db) {
   registerGameRoutes(routes, db);
   registerAdminRoutes(routes, db);
   registerRouteAnalysisRoutes(routes);
+  registerFeedbackRoutes(routes, db);
+
 
   return http.createServer(async (req, res) => {
     const pathname = new URL(req.url, 'http://internal').pathname;

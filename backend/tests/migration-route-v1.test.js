@@ -62,7 +62,14 @@ test('0002 keeps every legacy grid game and event, readable and exportable, and 
     const db = openDb(path);
 
     assert.deepEqual(db.prepare('SELECT name FROM schema_migrations ORDER BY name').all().map(r => r.name),
-      ['0001_init.sql', '0002_route_v1.sql', '0003_player_nickname.sql']);
+      [
+        '0001_init.sql',
+        '0002_route_v1.sql',
+        '0003_player_feedback.sql',
+        '0003_player_nickname.sql',
+        '0004_feedback_nickname.sql',
+        '0005_feedback_deletion.sql',
+      ]);
     assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1, 'foreign keys back on after migrating');
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
 
@@ -75,7 +82,7 @@ test('0002 keeps every legacy grid game and event, readable and exportable, and 
 
     // 舊局可以照舊規則繼續讀寫
     const old = getGame(db, 'old-playing');
-    assert.equal(old.playerNickname,null,'migration leaves historical anonymous records unnamed');
+    assert.equal(old.playerNickname, null, 'migration leaves historical anonymous records unnamed');
     assert.equal(old.ruleset, 'grid');
     assert.ok(Array.isArray(old.hand) && old.board);
     assert.equal(act(old, 0, null, 2500), true);
