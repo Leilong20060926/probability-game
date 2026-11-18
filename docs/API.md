@@ -306,3 +306,12 @@ JSON：`ruleset, version, source: "exact_dp", configId, config（完整快照）
 - 永久刪除該筆 games 與相關 events、action／lifecycle 冪等回應，整組操作在同一 SQLite 交易內完成。該局的 create-game 快取改成不含遊戲資料的 `410 { error: { code: "GAME_DELETED", message: "本局已刪除，請重新開始" } }`，保留原 key／hash，防止舊建局重送回傳已刪除狀態或意外建立另一局。
 - 保留玩家、session、重玩計數與其他局；不重排 attempt。刪除進行中的局後，該局不能繼續操作（原 actions／hints／lifecycle 以找不到遊戲回 404）；GET current 會回目前玩家最新的剩餘局，無局則 204。前端可同步後以新建局 key 重新開始。
 - 列表每列右側提供刪除按鈕，先確認永久刪除與相關事件；進行中的紀錄另提醒無法繼續。伺服器成功後才重新查列表／stats，空尾頁回到有效頁碼。未確認的網路錯誤不顯示刪除成功，不在前端樂觀藏列。之後的 games.csv／events.csv 自動不包含被刪除資料。
+
+## 玩家暱稱（2026-11-18，已實作）
+
+- `POST /api/games` 新增 `nickname` 字串，例如 `{ruleset:"route-v1",deviceType:"pointer",nickname:"小礦工"}`。去除頭尾空白後需為 1–20 個 Unicode code points，不能含控制字元；無效值回 400，不能消耗 attempt 或建立遊戲。為相容既有 grid／API 客戶端，完全省略此欄仍可匿名建局，`playerNickname:null`；新版玩家介面則必填才允許開始。
+- nickname 是顯示資料，不是身份憑證、不必唯一。保留 playerId、cookie 所有權與按 ID 計算的玩家數；同名不同 ID 不合併。建局冪等雜湊包含正規化後的 nickname，未帶 nickname 的舊請求雜湊形狀維持相容。
+- migration `0003_player_nickname.sql` 增加 `games.player_nickname`；每局建立時保存快照至欄位與 state_json，行動不修改名字。舊紀錄保持 NULL，不把新暱稱回填舊局，不改規則版本／configId。Safe GameView、`/api/admin/games` 列表新增 `playerNickname`。
+- 玩家開始前可輸入暱稱；重玩沿用，進行中不可修改，換下一位玩家才清空並建立新 playerId。重整選記錄模式後，可從自己的最近一局取回暱稱，但不自動彈出已結束的舊局成績。暱稱不是玩家 profile／登入帳號；刪除所有局後無紀錄可恢復時需重新輸入。
+- 紀錄頁玩家欄優先顯示暱稱；舊匿名資料顯示「匿名玩家＋ID 前 8 碼」。局次 CSV 新增 `playerNickname`，事件 CSV 新增 `playerId`、`playerNickname`，原 ID 與 join 關係皆保留；CSV 仍做公式注入防護，HTML 顯示經跳脫。
+- 不記錄試玩的暱稱與遊戲一樣只存在記憶體，不呼叫遊戲 API、不寫 localStorage。公開紀錄頁會公開顯示已記錄的暱稱，沿用使用者既有公開讀取決定。

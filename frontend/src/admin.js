@@ -45,7 +45,7 @@ async function load() {
   if(page>lastPage){page=lastPage;return load();}
   $('#stats').innerHTML = recordsStatsMarkup(stats,applied);
   $('#games').innerHTML = games.games.map(g => `<tr>${[
-    g.id,g.playerId,g.attempt,[g.ruleset,g.version,g.configId].filter(Boolean).join(' / '),g.ruleset==='route-v1'?`第 ${g.mapIndex} 張`:'—',g.status === 'playing' ? '進行中' : '已結束',
+    g.id,g.playerNickname||'匿名玩家 '+g.playerId.slice(0,8),g.attempt,[g.ruleset,g.version,g.configId].filter(Boolean).join(' / '),g.ruleset==='route-v1'?`第 ${g.mapIndex} 張`:'—',g.status === 'playing' ? '進行中' : '已結束',
     reason[g.reason] || '—',g.score,g.turns,g.durationMs == null ? '—' : (g.durationMs / 1000).toFixed(1),
   ].map(v => `<td>${e(v)}</td>`).join('')}<td class="record-operation"><button type="button" class="delete-record" data-delete-game="${e(g.id)}" aria-label="刪除遊戲 ${e(g.id)}">刪除</button></td></tr>`).join('') || '<tr><td colspan="11">尚無符合條件的紀錄。</td></tr>';
   document.querySelectorAll('[data-delete-game]').forEach(button=>button.onclick=()=>{

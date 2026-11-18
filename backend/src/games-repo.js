@@ -4,6 +4,7 @@ function toRecord(row) {
   if (!row) return null;
   const record = JSON.parse(row.state_json);
   record.ruleset ??= 'grid';
+  record.playerNickname ??= row.player_nickname ?? null;
   return record;
 }
 
@@ -27,8 +28,8 @@ export function insertGame(db, record, deviceType, now) {
     INSERT INTO games (
       id, player_id, attempt, ruleset, version, config_id, revision, source, mode, status, reason,
       started_at, ended_at, score, coins, turn, gold_row, gold_map_index, map_index, map_sequence,
-      device_type, config_json, state_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      device_type, config_json, state_json, created_at, updated_at, player_nickname
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     record.id, record.playerId, record.attempt, record.ruleset ?? 'grid', record.version,
     route ? record.configId : null, record.revision, record.source, record.mode, record.status,
@@ -39,7 +40,7 @@ export function insertGame(db, record, deviceType, now) {
     mapSequence(record),
     deviceType ?? null,
     route ? JSON.stringify(record.config) : null,
-    JSON.stringify(record), now, now,
+    JSON.stringify(record), now, now, record.playerNickname ?? null,
   );
 
   return record;

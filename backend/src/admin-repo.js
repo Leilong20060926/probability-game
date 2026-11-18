@@ -55,7 +55,7 @@ export function listGames(db, filters, page = 1, pageSize = 50) {
   const total = db.prepare(`SELECT COUNT(*) AS n FROM games ${where}`).get(...params).n;
 
   const rows = db.prepare(`
-    SELECT id, player_id, attempt, ruleset, version, config_id, source, mode, status, reason,
+    SELECT id, player_id, player_nickname, attempt, ruleset, version, config_id, source, mode, status, reason,
            started_at, ended_at, score, coins, turn, map_index, map_sequence, device_type
     FROM games ${where}
     ORDER BY created_at DESC
@@ -69,6 +69,7 @@ export function listGames(db, filters, page = 1, pageSize = 50) {
     games: rows.map(row => ({
       id: row.id,
       playerId: row.player_id,
+      playerNickname: row.player_nickname ?? null,
       attempt: row.attempt,
       ruleset: row.ruleset,
       version: row.version,
@@ -162,7 +163,7 @@ export function exportGameRows(db, filters) {
   const { sql: where, params } = buildWhere(filters);
 
   return db.prepare(`
-    SELECT id AS gameId, player_id AS playerId, attempt, ruleset, version, config_id AS configId,
+    SELECT id AS gameId, player_id AS playerId, player_nickname AS playerNickname, attempt, ruleset, version, config_id AS configId,
            source, mode, status, reason, started_at AS startedAt, ended_at AS endedAt,
            (ended_at - started_at) AS durationMs, turn AS turns, score, coins,
            CASE WHEN status = 'playing' THEN NULL ELSE gold_row END AS goldRow,
@@ -174,7 +175,7 @@ export function exportGameRows(db, filters) {
 }
 
 export const GAME_CSV_COLUMNS = [
-  'gameId', 'playerId', 'attempt', 'ruleset', 'version', 'configId', 'source', 'mode', 'status',
+  'gameId', 'playerId', 'playerNickname', 'attempt', 'ruleset', 'version', 'configId', 'source', 'mode', 'status',
   'reason', 'startedAt', 'endedAt', 'durationMs', 'turns', 'score', 'coins',
   'goldRow', 'goldMapIndex', 'mapIndex', 'mapSequence', 'deviceType',
 ];
@@ -183,7 +184,7 @@ export function exportEventRows(db, filters) {
   const { sql: where, params } = buildWhere(filters, 'g.');
 
   return db.prepare(`
-    SELECT e.game_id AS gameId, g.ruleset, g.version, g.config_id AS configId,
+    SELECT e.game_id AS gameId, g.player_id AS playerId, g.player_nickname AS playerNickname, g.ruleset, g.version, g.config_id AS configId,
            e.seq, e.turn, e.type, e.elapsed_ms AS elapsedMs,
            e.decision_ms AS decisionMs, e.card_id AS cardId, e.row, e.col,
            e.removed, e.reward, e.hand_count AS handCount, e.deck_count AS deckCount,
@@ -201,7 +202,7 @@ export function exportEventRows(db, filters) {
 }
 
 export const EVENT_CSV_COLUMNS = [
-  'gameId', 'ruleset', 'version', 'configId', 'seq', 'turn', 'type', 'elapsedMs', 'decisionMs',
+  'gameId', 'playerId', 'playerNickname', 'ruleset', 'version', 'configId', 'seq', 'turn', 'type', 'elapsedMs', 'decisionMs',
   'cardId', 'row', 'col', 'removed', 'reward', 'handCount', 'deckCount', 'reason', 'score',
   'mapIndex', 'mapId', 'pos', 'branch', 'a', 'action', 'segment',
   'payH', 'payV', 'payB', 'payX', 'handH', 'handV', 'handB', 'handX',

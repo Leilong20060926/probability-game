@@ -555,3 +555,17 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前�
 - 以上兩項修正均保留：刪除 API 404 是舊後端程序未載入新 handler；記錄模式初始化則忽略已結束的上一局，仍恢復進行中的局。兩者沒有改變後端 API 契約；更新後端程式或共用規則後需重啟服務才能生效。
 - Claude Code 已完成上述「結束一局→重新整理→選記錄資料→開始探勘」的瀏覽器驗證；這不代表先前列出的桌面／手機版面、刪除確認視窗、斷線重試、多分頁衝突與 CSV 實際下載等驗收已全部完成，這些仍待補驗。
 - Node 24 下測試目錄參數的相容性問題仍待處理；目前可依上方明確的測試檔 glob 執行，未修改 package.json。備份還原與公開部署前的完整驗證要求仍保留；本次僅整合文件衝突並保留既有暫存程式碼，不 Push、不部署。
+
+## Codex：玩家暱稱完成（2026-11-18，請 Claude Code review 新增 metadata 契約）
+
+依使用者「開始輸入暱稱，紀錄頁玩家欄以暱稱顯示」要求，本輪接好前端及必要的最小後端資料欄位。使用新 migration，不變更 shared／規則引擎、0.5.0 版本或正式難度；通常的後端分工仍維持 Claude Code。
+
+- 前端新增 `nickname.js` 驗證與開始按鈕上方暱稱欄（1–20 字）；未填／無效不能建新局、進行中鎖定、重玩沿用、換下一位清空。中文輸入法組字時 Enter 不會誤觸開始；逐字輸入不重繪整個 DOM 或移走焦點。保留 Claude 修正：取得已結束的 current 時只恢復暱稱，不重開舊結果視窗。
+- `route-storage.js` 建局帶 nickname；試玩只把暱稱放在記憶體 GameView，不送遊戲 API、不寫 localStorage。`admin.js` 玩家欄以跳脫後的 playerNickname 顯示，舊資料以匿名玩家＋短 ID 表示；完整 playerId 仍在 CSV 及後端保留，同名不是同一個人。
+- 新增 `backend/migrations/0003_player_nickname.sql`，只在 games 增加 nullable player_nickname。`routes/games.js` 驗證／正規化暱稱，納入建局冪等雜湊、建立每局快照；完全省略 nickname 的舊 API 客戶端仍相容。`games-repo.js`／`gameView.js`／`admin-repo.js` 支援保存、恢復、安全回應、列表及局次／事件 CSV。修改暱稱只影響下一局，既有紀錄不回填、不重新命名。
+- `backend/tests/nickname.test.js`：實際 HTTP 驗證暱稱保存、行動／恢復／重放、改名不回寫舊局、同名玩家身份隔離、CSV、20 個 emoji 與控制字元／長度驗證、公式注入防護、舊匿名相容。migration 回歸測試更新為含 0003，並確認舊資料暱稱為 NULL。
+- 前端測試擴充：必填阻止開局、HTML 跳脫、局中禁止改名、換人清空、重整恢復名字但不彈舊結果、實際 transport 建局包含 nickname、管理表格優先顯示安全暱稱。原先流程回歸測試以固定測試暱稱開局，測試不混入正式資料。
+
+驗證：`npm.cmd test` **42/42**、`npm.cmd run test:backend` **44/44**、`npm.cmd run build` 成功、`git diff --check` 通過。本次沒有規則變更，因此未重新跑耗時的精算／模擬測試。瀏覽器 inventory 仍為 apps=[]／browsers=[]，實際輸入、手機版面與暱稱 CSV 下載尚未做瀏覽器驗收。
+
+運行中的 5174 後端已重新啟動載入 0003（此次啟動 PID 22572，之後仍須以實際 port 程序為準）。升級前以 Node 內建 SQLite backup 在 work/before-nickname-1794993906492.db 建立本機快照，核對 integrity_check 及資料一致；這是一份此次升級前的本機快照，不是雲端或自動備份。升級後核對原有 23 筆 games 的 id／player_id／attempt／version／status／score 完全一致，events 數量不變；實際 GET 管理列表已有 playerNickname，兩種 CSV header 均已更新。沒有在真實 DB 新增測試局、改名舊資料或刪除紀錄。未修改 .env，未 Push、未部署。

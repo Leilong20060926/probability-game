@@ -9,6 +9,7 @@ export function toSafeGameView(record) {
   if (isRoute(record)) {
     return {
       ...routePublicView(record),
+      playerNickname: record.playerNickname ?? null,
       revision: record.revision,
       mode: 'server',
       serverNow: clock.now(),
@@ -29,6 +30,7 @@ export function toSafeGameView(record) {
   return {
     id: record.id,
     playerId: record.playerId,
+    playerNickname: record.playerNickname ?? null,
     attempt: record.attempt,
     ruleset: 'grid',
     version: record.version,

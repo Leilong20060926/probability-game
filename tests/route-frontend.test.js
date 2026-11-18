@@ -31,7 +31,7 @@ function root() {
     querySelector(selector){return this.querySelectorAll(selector)[0]||null;},
   };
 }
-const mount=(element,options={})=>mountRouteApp(element,{interval:()=>{},clock:()=>0,reducedMotion:()=>true,confirm:()=>true,...options});
+const mount=(element,options={})=>{const ui=mountRouteApp(element,{interval:()=>{},clock:()=>0,reducedMotion:()=>true,confirm:()=>true,...options});ui.setNickname('測試玩家');return ui;};
 const deck=prefix=>{const counts={H:4,V:4,B:2,X:1,R:5};for(const t of prefix)assert.ok(--counts[t]>=0);return [...prefix,...'HVBXR'.split('').flatMap(t=>Array(counts[t]).fill(t))];};
 const script=()=>({mapIds:[1,1,1],goldMapIndex:3,decks:Array.from({length:3},()=>deck('HHHVVXBHV'))});
 const steps=[{type:'pave',pay:{H:2,V:0,B:0,X:0}},{type:'choose_branch',branch:'B'},{type:'pave',pay:{H:1,V:0,B:0,X:1}},{type:'pave',pay:{H:1,V:1,B:0,X:0}}];
@@ -44,6 +44,7 @@ test('route trial: mode required, memory only, three maps and legal payment butt
   const element=root(),ui=mount(element,{server:()=>{calls++;throw Error('practice must not contact server');},trialFactory:()=>createRouteTrial({now:()=>now,gameOptions:{script:script()}})});
   assert.equal(calls,0);assert.equal(element.querySelector('[data-action="start"]').disabled,true);
   await ui.chooseMode('trial');await ui.start();
+  assert.equal(ui.state.game.playerNickname,'測試玩家');
   assert.equal(ui.state.game.ruleset,'route-v1');
   assert.equal(ui.state.game.mapId,1);assert.equal(ui.state.game.mapIndex,1);
   ui.select('H');assert.equal(element.querySelector('[data-action="pave"]').disabled,true);
@@ -59,6 +60,23 @@ test('route trial: mode required, memory only, three maps and legal payment butt
   assert.equal(ui.state.game.score,100);assert.equal(ui.state.game.turn,9);
   assert.match(element.innerHTML,/本局未記錄/);assert.equal(calls,0);
   await ui.nextPlayer();assert.equal(ui.state.game,null);assert.equal(calls,0);
+  assert.equal(ui.state.nickname,'');assert.equal(element.querySelector('[data-action="start"]').disabled,true);
+});
+
+test('nickname is required before start, escaped in the input and locked during play; reload restores it without opening the old result',async()=>{
+  const element=root(),trial=createRouteTrial({gameOptions:{script:script()}});
+  const ui=mount(element,{server:trial});
+  ui.setNickname('');await ui.chooseMode('server');await ui.start();assert.equal(ui.state.game,null);
+  ui.setNickname('x'.repeat(21));assert.equal(element.querySelector('[data-action="start"]').disabled,true);
+  ui.setNickname('  <礦工>  ');assert.match(element.innerHTML,/&lt;礦工&gt;/);
+  await ui.start();assert.equal(ui.state.game.playerNickname,'<礦工>');
+  ui.setNickname('冒名');assert.equal(ui.state.nickname,'<礦工>');
+  const restored=mount(root(),{server:trial});await restored.chooseMode('server');
+  assert.equal(restored.state.nickname,'<礦工>');assert.equal(restored.state.game.id,ui.state.game.id);
+  await restored.handle('end');
+  const reloaded=mountRouteApp(root(),{server:trial,interval:()=>{},clock:()=>0,reducedMotion:()=>true});
+  await reloaded.chooseMode('server');assert.equal(reloaded.state.nickname,'<礦工>');assert.equal(reloaded.state.game,null);
+  await reloaded.start();assert.equal(reloaded.state.game.playerNickname,'<礦工>');
 });
 
 test('route memory adapter: replay, invalid pay and strict 300-second boundary',async()=>{
@@ -146,6 +164,7 @@ test('route UI over real HTTP: lost create/action, exact retry, three maps, publ
   const creates=requests.filter(r=>r.path==='/api/games');
   assert.equal(creates.length,2);assert.equal(creates[0].options.headers['Idempotency-Key'],creates[1].options.headers['Idempotency-Key']);
   assert.equal(JSON.parse(creates[0].options.body).ruleset,'route-v1');
+  assert.equal(JSON.parse(creates[0].options.body).nickname,'測試玩家');
   for(const step of steps.slice(0,3))await clickStep(ui,step);
   loseAction=true;await clickStep(ui,steps[3]);
   const count=db.prepare('SELECT COUNT(*) AS n FROM events').get().n;

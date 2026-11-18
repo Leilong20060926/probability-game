@@ -41,7 +41,7 @@ test('public records UI loads, filters, paginates, retries and downloads without
     if(url.pathname.endsWith('.csv')) return new Response('gameId\r\ntest-game\r\n',{headers:{'Content-Type':'text/csv'}});
     if(url.pathname==='/api/admin/stats') return Response.json({games:deleted?50:51,players:2,finished:1,goldFinishRate:0,avgScore:0,avgDurationMs:1000,byReason:{abandoned:1},byScore:{0:1}});
     assert.equal(url.pathname,'/api/admin/games');
-    return Response.json({total:deleted?50:51,page:Number(url.searchParams.get('page')),pageSize:50,games:[{id:deleted?'game-2':'game-1',playerId:'player-1',attempt:1,status:'finished',reason:'abandoned',score:0,turns:1,durationMs:1000}]});
+    return Response.json({total:deleted?50:51,page:Number(url.searchParams.get('page')),pageSize:50,games:[{id:deleted?'game-2':'game-1',playerId:'player-1',playerNickname:'小礦工<測試>',attempt:1,status:'finished',reason:'abandoned',score:0,turns:1,durationMs:1000}]});
   };
   const settle=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
   const refresh=()=>node('#filters').onsubmit({preventDefault(){},currentTarget:{entries:[['ruleset','grid'],['version','0.2.0'],['status','finished'],['source','human'],['configId','config-test'],['mode','server']]}});
@@ -54,6 +54,7 @@ test('public records UI loads, filters, paginates, retries and downloads without
     assert.equal(calls.length,2);
     assert.match(node('#stats').innerHTML,/局數 51/);
     assert.match(node('#games').innerHTML,/game-1/);
+    assert.match(node('#games').innerHTML,/小礦工&lt;測試&gt;/);assert.doesNotMatch(node('#games').innerHTML,/<測試>|player-1/);
     assert.equal(node('#next').disabled,false);
     node('#next').onclick();await settle();
     assert.match(node('#page-info').textContent,/第 2 頁/);

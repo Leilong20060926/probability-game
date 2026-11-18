@@ -1,6 +1,7 @@
 import {newRouteGame,routeAct,routeCheckTimeout,routePublicView} from '../../shared/route-engine.js';
 import {uuid} from './uuid.js';
 import {ApiError} from './storage.js';
+import {nicknameError} from './nickname.js';
 
 export function createRouteTrial({now=Date.now,rng=Math.random,gameOptions={}}={}) {
   let playerId=uuid(),attempt=0,game=null;
@@ -8,7 +9,7 @@ export function createRouteTrial({now=Date.now,rng=Math.random,gameOptions={}}={
   const view=()=>{
     if(!game)return null;
     if(routeCheckTimeout(game,now()))game.revision++;
-    return {...routePublicView(game),revision:game.revision,serverNow:now(),mode:'trial'};
+    return {...routePublicView(game),playerNickname:game.playerNickname??null,revision:game.revision,serverNow:now(),mode:'trial'};
   };
   const error=(status,code,message,extra={})=>{throw new ApiError(status,{error:{code,message},...extra});};
   function remembered(key,body,operation) {
@@ -23,8 +24,10 @@ export function createRouteTrial({now=Date.now,rng=Math.random,gameOptions={}}={
     if(path==='/api/players/switch'){playerId=uuid();attempt=0;game=null;replay.clear();return {playerId,nextAttempt:1};}
     if(path==='/api/games/current')return view();
     if(path==='/api/games')return remembered(headers['Idempotency-Key']?'create:'+headers['Idempotency-Key']:null,body,()=>{
+      if(body.nickname!==undefined && nicknameError(body.nickname))error(400,'BAD_REQUEST',nicknameError(body.nickname));
       view();if(game?.status==='playing')error(409,'GAME_IN_PROGRESS','已有進行中的試玩',{game:view()});
       game=newRouteGame({...gameOptions,playerId,attempt:++attempt,now:now(),rng});game.mode='trial';game.revision=0;
+      game.playerNickname=body.nickname?.trim()||null;
       return view();
     });
     if(!game || !path.startsWith(`/api/games/${game.id}/`))error(404,'NOT_FOUND','找不到試玩');

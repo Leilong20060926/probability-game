@@ -98,6 +98,13 @@
 .route-history span { border: 1px solid var(--game-line); padding: 3px 6px; border-radius: 6px; }
 .route-session-controls { margin-top: auto; display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--game-line); }
 .route-session-controls p { margin: 0; line-height: 1.6; }
+.route-nickname { display: grid; gap: 5px; min-width: 0; }
+.route-nickname label { font-size: 13px; }
+.route-nickname label small { margin-left: 8px; color: var(--cream-muted); }
+.route-nickname input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--cream-muted); border-radius: 8px; background: var(--game-bg-2); color: var(--cream); font: inherit; }
+.route-nickname input:focus-visible { outline: 2px solid #e2c481; outline-offset: 2px; }
+.route-nickname input:disabled { opacity: .7; }
+.route-nickname > small { color: var(--cream-muted); font-size: 11px; }
 .route-mode { display: grid; gap: 8px; }
 .route-mode > div { display: flex; gap: 6px; }
 .route-mode button { flex: 1; }
@@ -263,5 +270,10 @@ body.route-workspace { display: grid; grid-template-rows: auto minmax(0,1fr); he
   .route-workspace .route-mode > div { flex: 1; }
   .route-workspace .route-mode button:disabled { display: none; }
   .route-workspace .route-notice { flex-basis: 100%; min-height: 0; font-size: 10px; }
+  .route-workspace .route-nickname { flex-basis: 100%; grid-template-columns: 70px minmax(0,1fr); align-items: center; gap: 4px 8px; }
+  .route-workspace .route-nickname label { font-size: 11px; }
+  .route-workspace .route-nickname label small { display: none; }
+  .route-workspace .route-nickname input { padding: 5px 8px; font-size: 12px; }
+  .route-workspace .route-nickname > small { grid-column: 2; font-size: 10px; }
   .route-workspace .route-hints { top: auto; bottom: 0; max-height: min(520px,80dvh); }
 }

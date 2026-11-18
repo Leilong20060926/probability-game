@@ -7,6 +7,7 @@ import {createLocalAdvisor} from './route-advisor.js';
 import {mapMarkup,handMarkup,CARD_TYPES,CARD_NAMES,emptyPay,total} from './route-view.js';
 import {payText,routeEffectText,playRouteEffects} from './route-effects.js';
 import {mountViewportFit} from './route-fit.js';
+import {nicknameError} from './nickname.js';
 
 const tutorial=[
   ['三地圖探勘','每張地圖都有第一段與 A/B 岔路。找到金幣會重新抽圖、重洗牌；找到金礦才結算分數。','.route-map'],
@@ -27,17 +28,28 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
   let hintOpen=false,hintLoading=false,hints=null,hintError='',hintToken=0;
   const lifecycleQueue=[];
   let mapFocusKey='';
+  let nickname='';
   const isRoute=()=>game?.ruleset==='route-v1';
   const active=()=>game?.status==='playing';
   const remaining=()=>game?Math.max(0,Math.ceil((game.deadlineAt-serverTime-(clock()-receivedAt))/1000)):300;
   const playable=()=>!!(mode && connected && !busy && !pending && isRoute() && active() && remaining()>0);
   const canChange=()=>!busy && !active() && (!pending || pending.kind==='initialize');
   const request=(path,options)=>mode==='trial'?trial(path,options):server(path,options);
+  const canStart=()=>!!(mode && connected && !busy && !pending && !active() && !nicknameError(nickname));
+  function setNickname(value,redraw=true){
+    if(active() || busy || pending)return;
+    nickname=String(value??'');
+    if(redraw){render();return;}
+    const error=app.querySelector('#route-nickname-error');if(error)error.textContent=nicknameError(nickname);
+    app.querySelectorAll('[data-action="start"]').forEach(button=>button.disabled=!canStart());
+    viewportFit.update();
+  }
   function clearHints(){hintToken++;hints=null;hintLoading=false;hintError='';}
   function accept(view) {
     if(game?.id!==view?.id || game?.revision!==view?.revision){selected=emptyPay();clearHints();}
     if(game?.id!==view?.id || game?.status!==view?.status)resultHidden=false;
     game=view;
+    if(view?.status==='playing' && view.playerNickname)nickname=view.playerNickname;
     if(view){serverTime=view.serverNow;receivedAt=clock();}
     if(view?.status==='finished'){helpStep=-1;hintOpen=false;lifecycleQueue.length=0;}
   }
@@ -64,6 +76,7 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
   }
   async function initialize() {
     player=await request('/api/players',{body:{}});await current();
+    if(game?.playerNickname && (!nickname || active()))nickname=game.playerNickname;
     // 上一局已結束時不帶回結果視窗，否則一進記錄模式就像「開局先死一次」。
     if(game?.status==='finished')game=null;
     if(isRoute() && active()){
@@ -77,7 +90,8 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
   function changeMode(){if(!canChange())return;mode=null;trial=null;game=null;player={nextAttempt:1};pending=null;connected=false;selected=emptyPay();clearHints();advisor.dispose();hintOpen=false;notice='';restoreRequest=null;lifecycleQueue.length=0;render();}
   function start() {
     if(!mode || !connected || busy || pending || active())return;
-    const req=routeCreateRequest(globalThis.matchMedia?.('(pointer: coarse)').matches?'touch':'pointer');
+    if(nicknameError(nickname)){notice=nicknameError(nickname);render();return;}
+    const req=routeCreateRequest(globalThis.matchMedia?.('(pointer: coarse)').matches?'touch':'pointer',nickname.trim());
     return run(async()=>{await request(req.path,req.options);await current();notice=game?.a?`開局抽到落石，第一段另付 ${game.a} 張（每段最多 3 張）。`:'選牌後，按鋪路、硬挖或換牌。';});
   }
   function submit(action) {
@@ -126,7 +140,7 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
     else if(action.type==='exchange')selected={...emptyPay(),[action.discard]:1};
     render();
   }
-  function nextPlayer(){if(active() || busy || pending)return;return run(async()=>{player=await request('/api/players/switch',{body:{}});await current();clearHints();advisor.dispose();notice='已換下一位玩家。';});}
+  function nextPlayer(){if(active() || busy || pending)return;return run(async()=>{player=await request('/api/players/switch',{body:{}});await current();nickname='';clearHints();advisor.dispose();notice='已換下一位玩家，請輸入暱稱。';});}
   function actions() {
     if(!isRoute() || !active() || game.phase!=='segment')return [];
     return legalActions(game.publicConfig,String(game.mapId),posFromObject(game.position),game.a,CARD_TYPES.map(t=>game.hand[t]),['H','V','B','X','R'].map(t=>game.deckCounts[t]));
@@ -151,18 +165,21 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
       <p class="route-demand">${view?.phase==='fork'?`岔路累積落石：加付 ${view.a} 張` :playing && route?`本段鋪路 ${view.paveCost} 張 · 硬挖 ${view.digCost??'不可用'} 張`:'找到金礦 60 分，每枚金幣再加 20 分；失敗為 0 分。'}</p>
       ${view?.completedMaps.length?`<div class="route-history">${view.completedMaps.map(m=>`<span>第${m.mapIndex}張／圖${m.mapId}：${m.result==='coin'?'金幣':m.result==='gold'?'金礦':'失敗'}</span>`).join('')}</div>`:''}
       ${route && playing?`<button data-action="hint" ${!playable()?'disabled':''}>查看精確提示</button>`:''}${hintMarkup()}
-      <div class="route-session-controls"><div class="route-mode"><strong>${mode==='trial'?'不記錄試玩':mode==='server'?'記錄資料':'是否記錄本局資料？'}</strong>${!mode?'<div><button data-action="trial">不記錄試玩</button><button data-action="server">記錄資料</button></div>':`<button data-action="mode" ${!canChange()?'disabled':''}>切換紀錄模式</button>`}</div>
-      ${legacy?`<p>舊版 grid 探勘尚未結束。結束舊局會以提前結束、0 分保存，之後才能玩三地圖。</p><button class="route-primary" data-action="end-grid" ${busy || pending || !connected?'disabled':''}>結束舊局，準備三地圖</button>`:!playing?`<button class="route-primary" data-action="start" ${!mode || !connected || busy || pending?'disabled':''}>${view?'再探勘一次':'開始探勘'} →</button>`:`<button data-action="end" ${!playable()?'disabled':''}>提前結束本局</button>`}
+      <div class="route-session-controls"><div class="route-nickname"><label for="route-nickname">玩家暱稱 <small>1–20 字</small></label><input id="route-nickname" data-key="nickname" type="text" value="${e(nickname)}" maxlength="40" autocomplete="off" placeholder="請輸入暱稱" aria-describedby="route-nickname-error" ${playing || busy || pending?'disabled':''}><small id="route-nickname-error">${!playing?e(nicknameError(nickname)):''}</small></div><div class="route-mode"><strong>${mode==='trial'?'不記錄試玩':mode==='server'?'記錄資料':'是否記錄本局資料？'}</strong>${!mode?'<div><button data-action="trial">不記錄試玩</button><button data-action="server">記錄資料</button></div>':`<button data-action="mode" ${!canChange()?'disabled':''}>切換紀錄模式</button>`}</div>
+      ${legacy?`<p>舊版 grid 探勘尚未結束。結束舊局會以提前結束、0 分保存，之後才能玩三地圖。</p><button class="route-primary" data-action="end-grid" ${busy || pending || !connected?'disabled':''}>結束舊局，準備三地圖</button>`:!playing?`<button class="route-primary" data-action="start" ${!canStart()?'disabled':''}>${view?'再探勘一次':'開始探勘'} →</button>`:`<button data-action="end" ${!playable()?'disabled':''}>提前結束本局</button>`}
       ${game && !playing?`<button data-action="next" ${busy || pending?'disabled':''}>換下一位玩家</button>${route?'<button data-action="result">查看本局成績</button>':''}`:''}
       <p class="route-notice" role="status">${e(notice)}</p>${pending && !busy?'<button class="route-primary" data-action="retry">重試連線／同步</button>':''}</div></aside>
       <section class="route-hand route-panel"><div class="route-panel-title"><h2>你的道路牌 <small>${route?total(game.hand):0} 張</small></h2><div>剩餘牌庫 ${view?.deckRemaining??16} 張 · ${['H','V','B','X','R'].map(t=>`${t==='R'?'落石':CARD_NAMES[t]} ${view?.deckCounts[t]??config.deck[t]}`).join(' · ')}</div></div>
       <div class="route-hand-row">${handMarkup(view?.hand||emptyPay(),selected,playable() && game.phase==='segment')}</div>${view?.phase==='fork' && playing?'<p class="route-fork-instruction">先看補完的手牌，再按地圖上的 A／B 線。</p>':`<div class="route-play-controls"><span>已選 ${n} 張：${e(payText(selected))}</span><button data-action="clear" ${!n || !playable()?'disabled':''}>清除</button><button class="route-primary" data-action="pave" ${!paymentAllowed('pave')?'disabled':''}>鋪路</button><button data-action="dig" ${!paymentAllowed('dig')?'disabled':''}>硬挖</button><button data-action="exchange" ${!canExchange?'disabled':''}>換牌</button></div>`}</section></div>
       ${helpStep>=0?`<section class="route-tutorial" role="dialog" aria-modal="false" aria-labelledby="route-help-title"><small>探勘教學 ${helpStep+1} / ${tutorial.length}</small><h2 id="route-help-title">${tutorial[helpStep][0]}</h2><p>${tutorial[helpStep][1]}</p><div><button data-action="help-close">跳過教學</button>${helpStep?'<button data-action="help-back">上一步</button>':''}<button class="route-primary" data-action="help-next">${helpStep===tutorial.length-1?'開始準備':'下一步'}</button></div></section>`:''}
       ${route && game.status==='finished' && !resultHidden && helpStep<0?`<div class="route-backdrop"><section class="route-result" role="dialog" aria-modal="true" aria-labelledby="route-result-title" tabindex="-1"><img src="/assets/targets/${game.reason==='gold'?'golden':'coin'}.png" alt=""><h2 id="route-result-title">${e(reasons[game.reason]||'探勘結束')}</h2><strong>${game.score} 分</strong><p>找到 ${game.coins} 枚金幣 · ${game.turn} 次動作</p><p>${mode==='trial'?'本局未記錄。':'本局由伺服器保存。'}</p><button data-action="result-close">先看探勘路線</button><button class="route-primary" data-action="start" ${busy || pending?'disabled':''}>再探勘一次</button><button data-action="next" ${busy || pending?'disabled':''}>換下一位玩家</button></section></div>`:''}</div>`;
+    const nameInput=app.querySelector('#route-nickname');
+    if(nameInput){nameInput.oninput=()=>setNickname(nameInput.value,false);nameInput.onkeydown=event=>{if(event.key==='Enter' && !event.isComposing && canStart()){event.preventDefault();start();}};}
     app.querySelectorAll('[data-card]').forEach(button=>{button.dataset.key='card-'+button.dataset.card;button.onclick=()=>select(button.dataset.card);});
     app.querySelectorAll('[data-remove]').forEach(button=>{button.dataset.key='remove-'+button.dataset.remove;button.onclick=()=>select(button.dataset.remove,-1);});
     app.querySelectorAll('[data-hint]').forEach(button=>button.onclick=()=>applyHint(Number(button.dataset.hint)));
     app.querySelectorAll('[data-action]').forEach(button=>{button.dataset.key=button.dataset.action;button.onclick=()=>handle(button.dataset.action);});
+    app.querySelectorAll('[data-action="start"]').forEach(button=>button.disabled=!canStart());
     viewportFit.update();
     const viewport=app.querySelector('.route-map-viewport');
     if(viewport){
@@ -208,7 +225,7 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
     if(!remaining() && !busy && !pending)run(current,'sync');
   },250);
   render();
-  return {chooseMode,start,submit,select,retry,changeMode,openHints,handle,nextPlayer,
-    get state(){return {game:game&&structuredClone(game),mode,busy,pending:pending?.kind,connected,selected:{...selected},notice,hints,hintLoading,hintError};}};
+  return {chooseMode,start,submit,select,retry,changeMode,openHints,handle,nextPlayer,setNickname,
+    get state(){return {game:game&&structuredClone(game),nickname,mode,busy,pending:pending?.kind,connected,selected:{...selected},notice,hints,hintLoading,hintError};}};
 }
 function formatTime(seconds){return `${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`;}

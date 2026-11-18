@@ -133,6 +133,12 @@ export function registerGameRoutes(routes, db) {
       const now = clock.now();
       const ruleset = body.ruleset ?? 'grid';
       if (!RULESETS.includes(ruleset)) throw errors.badRequest('ruleset 必須是 grid 或 route-v1');
+      let nickname=null;
+      if(body.nickname!==undefined){
+        if(typeof body.nickname!=='string')throw errors.badRequest('暱稱必須是文字');
+        nickname=body.nickname.trim();
+        if(!nickname || [...nickname].length>20 || /[\u0000-\u001f\u007f-\u009f]/u.test(nickname))throw errors.badRequest('暱稱需為 1–20 字，不能含控制字元');
+      }
 
       // 正式玩家不能用 payload 改牌庫或分數：設定由伺服器選，雜湊包含伺服器選定的 configId。
       const config = ruleset === 'route-v1' ? formalRouteConfig() : null;
@@ -141,6 +147,7 @@ export function registerGameRoutes(routes, db) {
         deviceType: body.deviceType || null,
         ruleset,
         configId: config?.configId ?? null,
+        ...(nickname!==null?{nickname}:{}),
       });
 
       const cached = findIdempotent(db, 'create-game', player.id, idempotencyKey);
@@ -170,6 +177,7 @@ export function registerGameRoutes(routes, db) {
         const record = ruleset === 'route-v1'
           ? newRouteGame({ playerId: player.id, attempt, rng: Math.random, now, config })
           : newGame(player.id, attempt, Math.random, now);
+        record.playerNickname=nickname;
         insertGame(db, record, deviceType, now);
         insertEvents(db, record.id, record.events, 0);
 
