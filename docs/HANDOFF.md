@@ -537,3 +537,9 @@ npm run backend           # http://localhost:5174，同時服務 /api/* 與前�
 - 未修改共用規則、引擎、機率模型、.env 或真實 SQLite；本機先前修改保留。本次未實際刪除使用者既有資料。
 
 驗證：npm test **41/41**（含擴充 admin UI harness：取消、原識別碼重試遺失的刪除回應、分頁收斂、刪除後重新讀統計／列表、被移除參數不再傳送、CSV 查詢），test:backend **42/42**（新增真實 HTTP 三項：完整 route 結束後公開刪除、stats/maps/CSV/重放同步、進行中局刪除與玩家保留、交易失敗回滾），build 與 diff --check 通過。所有刪除驗證只使用記憶體資料庫。瀏覽器工具仍 apps=[]／browsers=[]，未完成真實瀏覽器的確認視窗／按鈕／版面驗收。未 Push、未部署。
+
+## Codex：處理實際刪除 API 404（2026-11-18）
+
+使用者回報無法刪除。查得 localhost:5174 仍由先前啟動的 Node 程序提供服務，磁碟已有 DELETE handler，但記憶體內尚未載入；對確認不存在的 `__codex_missing_delete_probe__` 呼叫 DELETE，回 404「找不到這個 API」。先以唯讀 SQLite 核對該服務使用本專案的 backend/data/game.db，並核對服務回傳的 admin.js 與本機來源相同，再經環境核准重新啟動此後端。
+
+重啟後相同不存在 id 的 DELETE 回 200 `{deleted:true,gameId:…}`，紀錄數前後皆為 1，沒有刪除真實紀錄。沒有修改實作或重新建立資料庫；此問題是舊程序未重啟。後端目前以隱藏背景程序執行（啟動時 PID 27256），stdout/stderr 位於忽略追蹤的 work/backend-restart.log 與 work/backend-restart.err.log。使用者可在紀錄頁按重新整理再操作；無需重新整理仍在試玩的遊戲頁。未 Push、未部署。
