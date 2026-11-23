@@ -97,10 +97,19 @@ test('route memory adapter: replay, invalid pay and strict 300-second boundary',
   assert.ok(!('goldMapIndex' in expired) && !('deck' in expired) && !('script' in expired));
 });
 
-test('route effects: all effects preserve order, consecutive rocks get their own display', async () => {
-  const effects = [{ type: 'pay' }, { type: 'advance' }, { type: 'rock', a: 1 }, { type: 'rock', a: 2 }, { type: 'draw' }, { type: 'fork_ready' }], shown = [], waits = [];
+test('route effects: a draw batch displays once and preserves surrounding effects', async () => {
+  const effects = [
+    { type: 'pay' }, { type: 'advance' }, { type: 'draw', card: 'H' },
+    { type: 'rock', a: 1 }, { type: 'rock', a: 2 }, { type: 'rock', a: 3 },
+    { type: 'rock', a: 3, capped: true }, { type: 'draw', card: 'H' },
+    { type: 'fork_ready' },
+  ];
+  const shown = [], waits = [];
   await playRouteEffects(effects, e => shown.push(e), async ms => waits.push(ms));
-  assert.deepEqual(shown, [...effects, null]); assert.deepEqual(waits, [1500, 1500, 2600, 2600, 1755, 2860]);
+  assert.deepEqual(shown, [effects[0], effects[1], {
+    type: 'draw_summary', cards: { H: 2, V: 0, B: 0, X: 0, R: 4 }, a: 3, ignored: 1,
+  }, effects.at(-1), null]);
+  assert.equal(waits.length, 4);
 });
 
 test('route hint Worker protocol: compute off-thread, preserve revision and cancel pending advice', async () => {

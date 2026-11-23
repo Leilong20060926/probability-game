@@ -1,23 +1,36 @@
-const names = { H: '橫向', V: '縱向', B: '彎道', X: '十字' };
-export const payText = pay => Object.entries(pay || {}).filter(([, n]) => n).map(([t, n]) => `${names[t] || t}×${n}`).join('、') || '未選牌';
+const names = { H: '橫向', V: '縱向', B: '彎道', X: '十字', R: '落石' };
+
+export const payText = pay => Object.entries(pay || {})
+  .filter(([, n]) => n)
+  .map(([t, n]) => `${names[t] || t}×${n}`)
+  .join('、') || '未選牌';
+
 export function openingEffects(game) {
   if (!game || game.ruleset !== 'route-v1') return [];
-  const effects = [
+  const rocks = game.publicConfig.deck.R - game.deckCounts.R;
+  return [
     { type: 'map_start', mapIndex: game.mapIndex, mapId: game.mapId },
-    { type: 'deal', hand: { ...game.hand } },
+    {
+      type: 'draw_summary',
+      cards: { ...game.hand, R: rocks },
+      a: game.a,
+      ignored: rocks - game.a,
+    },
   ];
-  if (game.a > 0) effects.push({ type: 'opening_rock', a: game.a });
-  return effects;
 }
 
 export function routeEffectText(effect) {
-  const location = effect.pos === 'K' ? '岔路' : effect.pos === 'F' ? '第一段' : '新路段';
   switch (effect.type) {
     case 'map_start': return `第 ${effect.mapIndex} 張探勘：抽到地圖${effect.mapId}，重新洗牌。`;
-    case 'deal': return `發牌完成：${payText(effect.hand)}。`;
-    case 'opening_rock': return `開局落石：第一段需額外支付 ${effect.a} 張任意牌。`;
-    case 'draw': return `補到${names[effect.card] || effect.card}牌。`;
-    case 'rock': return effect.capped ? `抽到落石！${location}加付已達上限 ${effect.a} 張，這張不再增加。` : `抽到落石！${location}累積加付 ${effect.a} 張任意牌。`;
+    case 'draw_summary': {
+      let note = '';
+      if (effect.ignored > 0) {
+        note = `（累計超過 ${effect.a} 張，本次 ${effect.ignored} 張不計入加付）`;
+      } else if (effect.cards.R > 0) {
+        note = `（累計加付 ${effect.a} 張）`;
+      }
+      return `抽到：${payText(effect.cards)}${note}。`;
+    }
     case 'pay': return `${effect.action === 'dig' ? '硬挖' : '鋪路'}：交出${payText(effect.pay)}。`;
     case 'exchange': return `換牌：棄掉${names[effect.discard] || effect.discard}。`;
     case 'advance': return '前進一段，補牌中。';
@@ -30,24 +43,51 @@ export function routeEffectText(effect) {
     default: return '';
   }
 }
+
 export function routeEffectDuration(effect) {
   const text = routeEffectText(effect);
   if (!text) return 0;
 
   const chars = [...text.replace(/\s/g, '')].length;
-
-  const minimum = ['rock', 'opening_rock'].includes(effect.type)
+  const minimum = effect.cards?.R > 0
     ? 2600
     : ['map_start', 'reveal'].includes(effect.type)
       ? 2000
-      : effect.type === 'deal'
+      : effect.type === 'draw_summary'
         ? 2300
         : 1500;
 
-  return Math.min(
-    3800,
-    Math.max(minimum, 650 + chars * 85)
-  );
+  return Math.min(3800, Math.max(minimum, 650 + chars * 85));
+}
+
+function groupDrawEffects(effects) {
+  const grouped = [];
+  for (const effect of effects || []) {
+    if (effect.type !== 'draw' && effect.type !== 'rock') {
+      grouped.push(effect);
+      continue;
+    }
+
+    let summary = grouped.at(-1);
+    if (summary?.type !== 'draw_summary') {
+      summary = {
+        type: 'draw_summary',
+        cards: { H: 0, V: 0, B: 0, X: 0, R: 0 },
+        a: 0,
+        ignored: 0,
+      };
+      grouped.push(summary);
+    }
+
+    if (effect.type === 'rock') {
+      summary.cards.R++;
+      summary.a = effect.a;
+      if (effect.capped) summary.ignored++;
+    } else {
+      summary.cards[effect.card]++;
+    }
+  }
+  return grouped;
 }
 
 export async function playRouteEffects(
@@ -56,14 +96,10 @@ export async function playRouteEffects(
   wait = ms => new Promise(resolve => setTimeout(resolve, ms)),
   reduced = false,
 ) {
-  for (const effect of effects || []) {
+  for (const effect of groupDrawEffects(effects)) {
     onEffect(effect);
-
     const duration = routeEffectDuration(effect);
-
-    // 即使開啟減少動態效果，仍保留字幕閱讀時間。
     if (duration > 0) await wait(duration);
   }
-
   onEffect(null);
 }

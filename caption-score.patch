@@ -1,0 +1,307 @@
+diff --git a/frontend/index.html b/frontend/index.html
+index 9d08086..c752b27 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -27 +27 @@
+-  <script type="module" src="/src/route-main.js"></script>
++  <script type="module" src="/src/route-main.js?v=score-captions-2"></script>
+diff --git a/frontend/src/route-app.js b/frontend/src/route-app.js
+index e706617..5fa8210 100644
+--- a/frontend/src/route-app.js
++++ b/frontend/src/route-app.js
+@@ -8 +8 @@ import {mapMarkup,handMarkup,CARD_TYPES,CARD_NAMES,emptyPay,total} from './route
+-import {payText,routeEffectText,playRouteEffects} from './route-effects.js';
++import {payText,routeEffectText,playRouteEffects,openingEffects} from './route-effects.js?v=score-captions-2';
+@@ -23 +23 @@ const reasons={gold:'成功找到金礦',exhausted:'牌已用盡，無法通過
+-export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTrial,advisor=createLocalAdvisor(),clock=()=>performance.now(),interval=setInterval,wait,reducedMotion=()=>globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches,confirm=message=>globalThis.confirm(message)}={}) {
++export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTrial,advisor=createLocalAdvisor(),clock=()=>performance.now(),interval=setInterval,wait,reducedMotion=()=>globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches,confirm=message=>globalThis.confirm(message),feedback=null}={}) {
+@@ -33,0 +34 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
++  const needsFeedback=()=>mode==='server' && isRoute() && game?.status==='finished' && !!feedback?.required?.(game);
+@@ -36 +37 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-  const canChange=()=>!busy && !active() && (!pending || pending.kind==='initialize');
++  const canChange=()=>!busy && !active() && !needsFeedback() && (!pending || pending.kind==='initialize');
+@@ -38 +39 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-  const canStart=()=>!!(mode && connected && !busy && !pending && !active() && !nicknameError(nickname));
++  const canStart=()=>!!(mode && connected && !busy && !pending && !active() && !needsFeedback() && !nicknameError(nickname));
+@@ -81 +82 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-    if(game?.status==='finished')game=null;
++    if(game?.status==='finished' && !needsFeedback())game=null;
+@@ -89 +90 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-  function chooseMode(next){if(busy || active() || pending)return;mode=next;trial=next==='trial'?trialFactory():null;return run(initialize,'initialize');}
++  function chooseMode(next){if(busy || active() || pending || needsFeedback())return;mode=next;trial=next==='trial'?trialFactory():null;return run(initialize,'initialize');}
+@@ -92 +93 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-    if(!mode || !connected || busy || pending || active())return;
++    if(!mode || !connected || busy || pending || active() || needsFeedback())return;
+@@ -95 +96,7 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-    return run(async()=>{await request(req.path,req.options);await current();notice=game?.a?`開局抽到落石，第一段另付 ${game.a} 張（每段最多 3 張）。`:'選牌後，按鋪路、硬挖或換牌。';});
++    return run(async()=>{
++      const view=await request(req.path,req.options);
++      accept(view);helpStep=-1;
++      try{await playRouteEffects(openingEffects(view),x=>{effect=x;render();},wait,reducedMotion());}finally{effect=null;}
++      await current();
++      notice=game?.status==='finished'?reasons[game.reason]:game?.a?`開局落石：第一段另付 ${game.a} 張（每段最多 3 張）。`:'選牌後，按鋪路、硬挖或換牌。';
++    });
+@@ -143 +150 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-  function nextPlayer(){if(active() || busy || pending)return;return run(async()=>{player=await request('/api/players/switch',{body:{}});await current();nickname='';clearHints();advisor.dispose();notice='已換下一位玩家，請輸入暱稱。';});}
++  function nextPlayer(){if(active() || busy || pending || needsFeedback())return;return run(async()=>{player=await request('/api/players/switch',{body:{}});await current();nickname='';clearHints();advisor.dispose();notice='已換下一位玩家，請輸入暱稱。';});}
+@@ -168,3 +175,3 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-      <div class="route-session-controls"><div class="route-nickname"><label for="route-nickname">玩家暱稱 <small>1–20 字</small></label><input id="route-nickname" data-key="nickname" type="text" value="${e(nickname)}" maxlength="40" autocomplete="off" placeholder="請輸入暱稱" aria-describedby="route-nickname-error" ${playing || busy || pending?'disabled':''}><small id="route-nickname-error">${!playing?e(nicknameError(nickname)):''}</small></div><div class="route-mode"><strong>${mode==='trial'?'不記錄試玩':mode==='server'?'記錄資料':'是否記錄本局資料？'}</strong>${!mode?'<div><button data-action="trial">不記錄試玩</button><button data-action="server">記錄資料</button></div>':`<button data-action="mode" ${!canChange()?'disabled':''}>切換紀錄模式</button>`}</div>
+-      ${legacy?`<p>舊版 grid 探勘尚未結束。結束舊局會以提前結束、0 分保存，之後才能玩三地圖。</p><button class="route-primary" data-action="end-grid" ${busy || pending || !connected?'disabled':''}>結束舊局，準備三地圖</button>`:!playing?`<button class="route-primary" data-action="start" ${!canStart()?'disabled':''}>${view?'再探勘一次':'開始探勘'} →</button>`:`<button data-action="end" ${!playable()?'disabled':''}>提前結束本局</button>`}
+-      ${game && !playing?`<button data-action="next" ${busy || pending?'disabled':''}>換下一位玩家</button>${route?'<button data-action="result">查看本局成績</button>':''}`:''}
++      <div class="route-session-controls"><div class="route-nickname"><label for="route-nickname">玩家暱稱 <small>1–20 字</small></label><input id="route-nickname" data-key="nickname" type="text" value="${e(nickname)}" maxlength="40" autocomplete="off" placeholder="請輸入暱稱" aria-describedby="route-nickname-error" ${playing || busy || pending || needsFeedback()?'disabled':''}><small id="route-nickname-error">${!playing?e(nicknameError(nickname)):''}</small></div><div class="route-mode"><strong>${mode==='trial'?'不記錄試玩':mode==='server'?'記錄資料':'是否記錄本局資料？'}</strong>${!mode?'<div><button data-action="trial">不記錄試玩</button><button data-action="server">記錄資料</button></div>':`<button data-action="mode" ${!canChange()?'disabled':''}>切換紀錄模式</button>`}</div>
++      ${legacy?`<p>舊版 grid 探勘尚未結束。結束舊局會以提前結束、0 分保存，之後才能玩三地圖。</p><button class="route-primary" data-action="end-grid" ${busy || pending || !connected?'disabled':''}>結束舊局，準備三地圖</button>`:!playing && needsFeedback()?`<button class="route-primary" data-action="feedback" ${busy || pending?'disabled':''}>下一步：填寫回饋</button>`:!playing?`<button class="route-primary" data-action="start" ${!canStart()?'disabled':''}>${view?'再探勘一次':'開始探勘'} →</button>`:`<button data-action="end" ${!playable()?'disabled':''}>提前結束本局</button>`}
++      ${game && !playing?`${!needsFeedback()?`<button data-action="next" ${busy || pending?'disabled':''}>換下一位玩家</button>`:''}${route?'<button data-action="result">查看本局成績</button>':''}`:''}
+@@ -175 +182 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-      ${route && game.status==='finished' && !resultHidden && helpStep<0?`<div class="route-backdrop"><section class="route-result" role="dialog" aria-modal="true" aria-labelledby="route-result-title" tabindex="-1"><img src="/assets/targets/${game.reason==='gold'?'golden':'coin'}.png" alt=""><h2 id="route-result-title">${e(reasons[game.reason]||'探勘結束')}</h2><strong>${game.score} 分</strong><p>找到 ${game.coins} 枚金幣 · ${game.turn} 次動作</p><p>${mode==='trial'?'本局未記錄。':'本局由伺服器保存。'}</p><button data-action="result-close">先看探勘路線</button><button class="route-primary" data-action="start" ${busy || pending?'disabled':''}>再探勘一次</button><button data-action="next" ${busy || pending?'disabled':''}>換下一位玩家</button></section></div>`:''}</div>`;
++      ${route && game.status==='finished' && !busy && !resultHidden && helpStep<0?`<div class="route-backdrop"><section class="route-result" role="dialog" aria-modal="true" aria-labelledby="route-result-title" tabindex="-1"><img src="/assets/targets/${game.reason==='gold'?'golden':'coin'}.png" alt=""><h2 id="route-result-title">${e(reasons[game.reason]||'探勘結束')}</h2><strong>${game.score} 分</strong><p>找到 ${game.coins} 枚金幣 · ${game.turn} 次動作</p><p>${mode==='trial'?'本局未記錄。':'本局由伺服器保存。'}</p><button data-action="result-close">先看探勘路線</button>${needsFeedback()?'<button class="route-primary" data-action="feedback">下一步：填寫回饋</button>':`<button class="route-primary" data-action="start" ${busy || pending?'disabled':''}>再探勘一次</button><button data-action="next" ${busy || pending?'disabled':''}>換下一位玩家</button>`}</section></div>`:''}</div>`;
+@@ -197 +204 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-    if(route && game.status==='finished' && !resultHidden && helpStep<0)app.querySelector('.route-result')?.focus({preventScroll:true});
++    if(route && game.status==='finished' && !busy && !resultHidden && helpStep<0)app.querySelector('.route-result')?.focus({preventScroll:true});
+@@ -209,0 +217 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
++      case 'feedback':if(needsFeedback() && !busy && !pending)return feedback.open(game);return;
+@@ -228 +236 @@ export function mountRouteApp(app,{server=serverApi,trialFactory=createRouteTria
+-  return {chooseMode,start,submit,select,retry,changeMode,openHints,handle,nextPlayer,setNickname,
++  return {chooseMode,start,submit,select,retry,changeMode,openHints,handle,nextPlayer,setNickname,refresh:render,
+diff --git a/frontend/src/route-effects.js b/frontend/src/route-effects.js
+index 46ce68a..2ffcdc4 100644
+--- a/frontend/src/route-effects.js
++++ b/frontend/src/route-effects.js
+@@ -2,0 +3,10 @@ export const payText = pay => Object.entries(pay || {}).filter(([, n]) => n).map
++export function openingEffects(game) {
++  if (!game || game.ruleset !== 'route-v1') return [];
++  const effects = [
++    {type: 'map_start', mapIndex: game.mapIndex, mapId: game.mapId},
++    {type: 'deal', hand: {...game.hand}},
++  ];
++  if (game.a > 0) effects.push({type: 'opening_rock', a: game.a});
++  return effects;
++}
++
+@@ -6,0 +17,2 @@ export function routeEffectText(effect) {
++    case 'deal': return `發牌完成：${payText(effect.hand)}。`;
++    case 'opening_rock': return `開局落石：第一段需額外支付 ${effect.a} 張任意牌。`;
+@@ -27,2 +39,2 @@ export function routeEffectDuration(effect) {
+-  const minimum = effect.type === 'rock'
+-    ? 2800
++  const minimum = ['rock', 'opening_rock'].includes(effect.type)
++    ? 3500
+@@ -30,2 +42,4 @@ export function routeEffectDuration(effect) {
+-      ? 2200
+-      : 1500;
++      ? 2500
++      : effect.type === 'deal'
++        ? 3000
++        : 2000;
+@@ -33,4 +47 @@ export function routeEffectDuration(effect) {
+-  return Math.min(
+-    4000,
+-    Math.max(minimum, 700 + chars * 90)
+-  );
++  return Math.min(5000, Math.max(minimum, 800 + chars * 110));
+diff --git a/frontend/src/route-main.js b/frontend/src/route-main.js
+index 126b3f6..c4f5514 100644
+--- a/frontend/src/route-main.js
++++ b/frontend/src/route-main.js
+@@ -1,3 +1,3 @@
+-import { mountRouteApp } from './route-app.js';
+-import { api } from './storage.js';
+-import { createFeedbackPrompt } from './feedback.js';
++import {mountRouteApp} from './route-app.js?v=score-captions-2';
++import {api} from './storage.js';
++import {createFeedbackPrompt} from './feedback.js';
+@@ -6,2 +6,2 @@ const markerKey = 'probability-game:feedback-observed';
+-let observed = null;
+-let playerId = null;
++let observed = null, playerId = null, ui = null;
++let feedbackTarget = null, probeKey = null;
+@@ -11,8 +11,5 @@ try {
+-    const saved = JSON.parse(sessionStorage.getItem(markerKey));
+-    if (
+-        typeof saved?.playerId === 'string' &&
+-        typeof saved?.gameId === 'string'
+-    ) {
+-        observed = saved;
+-    }
+-} catch { }
++  const saved = JSON.parse(sessionStorage.getItem(markerKey));
++  if (typeof saved?.playerId === 'string' && typeof saved?.gameId === 'string') {
++    observed = saved;
++  }
++} catch {}
+@@ -21,8 +18,5 @@ function remember(value) {
+-    observed = value;
+-    try {
+-        if (value) {
+-            sessionStorage.setItem(markerKey, JSON.stringify(value));
+-        } else {
+-            sessionStorage.removeItem(markerKey);
+-        }
+-    } catch { }
++  observed = value;
++  try {
++    if (value) sessionStorage.setItem(markerKey, JSON.stringify(value));
++    else sessionStorage.removeItem(markerKey);
++  } catch {}
+@@ -31,16 +25,18 @@ function remember(value) {
+-const feedback = createFeedbackPrompt({
+-    request: async (path, options) => {
+-        const gameId = observed?.gameId;
+-
+-        const requestPath = gameId && !options?.body
+-            ? `${path}?gameId=${encodeURIComponent(gameId)}`
+-            : path;
+-
+-        const requestOptions = gameId && options?.body
+-            ? { ...options, body: { ...options.body, gameId } }
+-            : options;
+-
+-        const result = await api(requestPath, requestOptions);
+-
+-        if (result?.submitted && result.playerId) {
+-            submittedPlayers.add(result.playerId);
++async function requestFeedback(path, options) {
++  const gameId = observed?.gameId;
++  const requestPath = gameId && !options?.body
++    ? `${path}?gameId=${encodeURIComponent(gameId)}` : path;
++  const requestOptions = gameId && options?.body
++    ? {...options, body: {...options.body, gameId}} : options;
++  const result = await api(requestPath, requestOptions);
++
++  if (result?.submitted && result.playerId) {
++    submittedPlayers.add(result.playerId);
++    if (observed?.playerId === result.playerId && observed.gameId === gameId) {
++      remember(null);
++    }
++    if (feedbackTarget?.playerId === result.playerId) feedbackTarget = null;
++    setTimeout(() => ui?.refresh(), 0);
++  }
++  return result;
++}
+@@ -48,7 +44,19 @@ const feedback = createFeedbackPrompt({
+-            if (
+-                observed?.playerId === result.playerId &&
+-                observed.gameId === gameId
+-            ) {
+-                remember(null);
+-            }
+-        }
++const feedback = createFeedbackPrompt({request: requestFeedback});
++
++function inspectFinished(game) {
++  const key = `${game.playerId}:${game.id}`;
++  if (probeKey === key) return;
++  probeKey = key;
++  feedbackTarget = {playerId: game.playerId, gameId: game.id};
++
++  // 只在背景確認資格；成績畫面不等待問卷 API，也不自動開問卷。
++  void requestFeedback('/api/feedback').then(status => {
++    if (probeKey !== key || playerId !== game.playerId) return;
++    if (status.playerId !== playerId) return;
++    if (submittedPlayers.has(playerId) || !status.required) feedbackTarget = null;
++    ui?.refresh();
++  }).catch(() => {
++    // 問卷服務暫時失敗時仍保留成績，玩家按下一步可重新連線。
++    if (probeKey === key && playerId === game.playerId) ui?.refresh();
++  });
++}
+@@ -56 +64,8 @@ const feedback = createFeedbackPrompt({
+-        return result;
++ui = mountRouteApp(document.querySelector('#app'), {
++  feedback: {
++    required: game => feedbackTarget?.playerId === game.playerId &&
++      feedbackTarget?.gameId === game.id && !submittedPlayers.has(game.playerId),
++    open: game => {
++      if (feedbackTarget?.playerId === game.playerId && feedbackTarget.gameId === game.id) {
++        feedback.check();
++      }
+@@ -58,27 +73,14 @@ const feedback = createFeedbackPrompt({
+-});
+-
+-mountRouteApp(document.querySelector('#app'), {
+-    server: async (path, options) => {
+-        const result = await api(path, options);
+-
+-        if (path === '/api/players' || path === '/api/players/switch') {
+-            if (path === '/api/players/switch') remember(null);
+-
+-            if (playerId !== result.playerId) {
+-                playerId = result.playerId;
+-
+-                if (observed && observed.playerId !== playerId) {
+-                    remember(null);
+-                }
+-
+-                feedback.setPlayer(playerId);
+-            }
+-        }
+-
+-        if (
+-            result?.playerId === playerId &&
+-            !submittedPlayers.has(playerId)
+-        ) {
+-            if (path === '/api/games' && result.id) {
+-                remember({ playerId, gameId: result.id });
+-            }
++  },
++  server: async (path, options) => {
++    const result = await api(path, options);
++
++    if (path === '/api/players' || path === '/api/players/switch') {
++      if (path === '/api/players/switch') remember(null);
++      if (playerId !== result.playerId) {
++        playerId = result.playerId;
++        feedbackTarget = null;
++        probeKey = null;
++        if (observed && observed.playerId !== playerId) remember(null);
++        feedback.setPlayer(playerId);
++      }
++    }
+@@ -86,11 +88,13 @@ mountRouteApp(document.querySelector('#app'), {
+-            if (path === '/api/games/current') {
+-                if (result.status === 'playing') {
+-                    remember({ playerId, gameId: result.id });
+-                } else if (
+-                    result.status === 'finished' &&
+-                    observed?.gameId === result.id &&
+-                    observed.playerId === playerId
+-                ) {
+-                    feedback.check();
+-                }
+-            }
++    if (result?.playerId === playerId && result.ruleset === 'route-v1' &&
++        !submittedPlayers.has(playerId)) {
++      if (path === '/api/games' && result.id) {
++        feedbackTarget = null;
++        probeKey = null;
++        remember({playerId, gameId: result.id});
++      }
++      if (path === '/api/games/current') {
++        if (result.status === 'playing') {
++          remember({playerId, gameId: result.id});
++        } else if (result.status === 'finished' &&
++                   observed?.gameId === result.id && observed.playerId === playerId) {
++          inspectFinished(result);
+@@ -98,4 +102,5 @@ mountRouteApp(document.querySelector('#app'), {
+-
+-        return result;
+-    },
+-});
+\ No newline at end of file
++      }
++    }
++    return result;
++  },
++});
+diff --git a/tests/route-frontend.test.js b/tests/route-frontend.test.js
+index 12f2d79..89c67bf 100644
+--- a/tests/route-frontend.test.js
++++ b/tests/route-frontend.test.js
+@@ -36 +36 @@ function root() {
+-const mount = (element, options = {}) => { const ui = mountRouteApp(element, { interval: () => { }, clock: () => 0, reducedMotion: () => true, confirm: () => true, ...options }); ui.setNickname('測試玩家'); return ui; };
++const mount = (element, options = {}) => { const ui = mountRouteApp(element, { interval: () => { }, clock: () => 0, wait: async () => {}, reducedMotion: () => true, confirm: () => true, ...options }); ui.setNickname('測試玩家'); return ui; };
+@@ -79 +79 @@ test('nickname is required before start, escaped in the input and locked during
+-  const reloaded = mountRouteApp(root(), { server: trial, interval: () => { }, clock: () => 0, wait: async () => { }, wait: async () => { }, reducedMotion: () => true });
++  const reloaded = mountRouteApp(root(), { server: trial, interval: () => { }, clock: () => 0, wait: async () => {}, reducedMotion: () => true });
+@@ -103 +103 @@ test('route effects: all effects preserve order, consecutive rocks get their own
+-  assert.deepEqual(shown, [...effects, null]); assert.deepEqual(waits, [1510, 1510, 2800, 2800, 1870, 3040]);
++  assert.deepEqual(shown, [...effects, null]); assert.deepEqual(waits, [2000, 2000, 3500, 3500, 2230, 3660]);
